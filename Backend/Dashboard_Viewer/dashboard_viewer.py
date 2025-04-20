@@ -3,8 +3,10 @@ import os
 import json
 from pathlib import Path
 import uuid
+from flask_cors import CORS
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
+CORS(app)  # Enable CORS for all routes
 
 # Directory where dashboard files are stored
 DASHBOARD_DIR = Path("dashboards")
@@ -120,6 +122,77 @@ def get_dashboard_data(dashboard_id):
     except Exception as e:
         print(f"Error loading dashboard {dashboard_id}: {e}")
         abort(500)
+
+@app.route('/api/deploy-dashboard', methods=['POST'])
+def deploy_dashboard():
+    """
+    Deploy a dashboard for public sharing.
+    """
+    try:
+        # Get dashboard data from the request
+        dashboard_data = request.json
+        
+        # Create a unique ID for the dashboard
+        dashboard_id = str(uuid.uuid4())
+        
+        # Sanitize dashboard name for filename
+        safe_name = "".join(c for c in dashboard_data["name"] if c.isalnum() or c in [' ', '_', '-']).strip()
+        safe_name = safe_name.replace(' ', '_').lower()
+        
+        # Create dashboards directory if it doesn't exist
+        os.makedirs(DASHBOARD_DIR, exist_ok=True)
+        
+        # Ensure dataset structure is valid
+        if "dataset" not in dashboard_data:
+            dashboard_data["dataset"] = {"headers": [], "rows": []}
+        else:
+            # Validate dataset format
+            if not isinstance(dashboard_data["dataset"], dict):
+                dashboard_data["dataset"] = {"headers": [], "rows": []}
+            else:
+                if "headers" not in dashboard_data["dataset"] or not isinstance(dashboard_data["dataset"]["headers"], list):
+                    dashboard_data["dataset"]["headers"] = []
+                if "rows" not in dashboard_data["dataset"] or not isinstance(dashboard_data["dataset"]["rows"], list):
+                    dashboard_data["dataset"]["rows"] = []
+        
+        # Validate widgets
+        if "widgets" not in dashboard_data or not isinstance(dashboard_data["widgets"], list):
+            dashboard_data["widgets"] = []
+        
+        for widget in dashboard_data["widgets"]:
+            if "config" not in widget:
+                widget["config"] = {}
+            if "type" not in widget:
+                widget["type"] = "unknown"
+        
+        # Sanitize dashboard data to prevent JSON parsing errors
+        def sanitize_json_value(value):
+            if isinstance(value, str):
+                # Remove control characters that could break JSON parsing
+                return ''.join(c for c in value if ord(c) >= 32 or c in '\n\r\t')
+            elif isinstance(value, dict):
+                return {k: sanitize_json_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [sanitize_json_value(item) for item in value]
+            else:
+                return value
+        
+        dashboard_data = sanitize_json_value(dashboard_data)
+        
+        # Save dashboard data to file
+        file_name = f"{safe_name}_{dashboard_id}.json"
+        dashboard_path = DASHBOARD_DIR / file_name
+        with open(dashboard_path, "w") as f:
+            json.dump(dashboard_data, f)
+            
+        # Generate a URL for the dashboard
+        host_url = request.host_url.rstrip('/')
+        deploy_url = f"{host_url}/view/{safe_name}_{dashboard_id}"
+        
+        return jsonify({"deployUrl": deploy_url, "dashboardId": dashboard_id})
+    except Exception as e:
+        print(f"Error deploying dashboard: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     # Create dashboards directory if it doesn't exist

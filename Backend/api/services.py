@@ -534,7 +534,7 @@ async def deploy_dashboard(dashboard_data: dict):
         dashboard_data = sanitize_json_value(dashboard_data)
         
         # Save dashboard data to file
-        dashboard_path = f"dashboards/{safe_name}_{dashboard_id}.json"
+        dashboard_path = f"Dashboard_Viewer/dashboards/{safe_name}_{dashboard_id}.json"
         with open(dashboard_path, "w") as f:
             json.dump(dashboard_data, f)
             

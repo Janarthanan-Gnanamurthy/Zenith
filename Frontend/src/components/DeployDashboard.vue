@@ -98,7 +98,6 @@
 
 <script>
 import { defineComponent } from 'vue';
-import { apiClient } from '@/services/apiService';
 
 export default defineComponent({
   name: 'DeployDashboard',
@@ -178,15 +177,28 @@ export default defineComponent({
           }
         };
         
-        // Deploy dashboard to backend service
-        const response = await apiClient.post('http://localhost:8000/api/deploy-dashboard', dashboardData);
+        // Deploy dashboard to Koyeb service
+        const koyebUrl = 'https://zenith.koyeb.app/api/deploy-dashboard';
+        const response = await fetch(koyebUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(dashboardData)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error ${response.status}`);
+        }
+        
+        const data = await response.json();
         
         // Set the deployed URL
-        this.deployedUrl = response.data.deployUrl;
+        this.deployedUrl = data.deployUrl;
         this.deploymentStage = 'success';
       } catch (error) {
         console.error('Error deploying dashboard:', error);
-        this.errorMessage = error.response?.data?.message || 'Failed to deploy dashboard. Please try again.';
+        this.errorMessage = 'Failed to deploy dashboard. Please try again.';
         this.deploymentStage = 'error';
       } finally {
         this.isDeploying = false;
@@ -194,14 +206,16 @@ export default defineComponent({
     },
     
     copyShareUrl() {
-      const urlInput = this.$refs.shareUrlInput;
-      urlInput.select();
-      document.execCommand('copy');
-      
-      this.copied = true;
-      setTimeout(() => {
-        this.copied = false;
-      }, 2000);
+      navigator.clipboard.writeText(this.deployedUrl)
+        .then(() => {
+          this.copied = true;
+          setTimeout(() => {
+            this.copied = false;
+          }, 2000);
+        })
+        .catch(err => {
+          console.error('Failed to copy URL: ', err);
+        });
     }
   }
 });
