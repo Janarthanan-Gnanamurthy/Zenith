@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { authService } from '../services/authService';
-import { apiClient } from '../services/apiService';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null);
@@ -12,10 +11,6 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
     try {
       user.value = await authService.getCurrentUser();
-      if (user.value) {
-        // Verify token with backend
-        await apiClient.post('http://127.0.0.1:8000/api/auth/verify-token');
-      }
     } catch (err) {
       console.error('Auth initialization error:', err);
       error.value = err.message;
@@ -31,8 +26,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const newUser = await authService.register(email, password);
       user.value = newUser;
-      // Create user profile in backend
-      await apiClient.post('http://127.0.0.1:8000/api/user/profile');
       return newUser;
     } catch (err) {
       error.value = err.message;
@@ -63,8 +56,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const loggedInUser = await authService.loginWithGoogle();
       user.value = loggedInUser;
-      // Check if it's a new user and create profile if needed
-      await apiClient.post('http://127.0.0.1:8000/api/user/profile');
       return loggedInUser;
     } catch (err) {
       error.value = err.message;

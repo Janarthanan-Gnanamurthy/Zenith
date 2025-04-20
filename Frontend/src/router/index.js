@@ -11,7 +11,7 @@ const routes = [
     path: '/',
     name: 'DataProcessor',
     component: DataProcessor,
-    meta: { requiresAuth: false } 
+    meta: { requiresAuth: true} 
   },
   {
     path: '/dashboard-builder',
@@ -29,6 +29,41 @@ const routes = [
     path: '/login', 
     component: Login,
     meta: { requiresGuest: true }
+  },
+  {
+    path: '/about',
+    name: 'About',
+    component: () => import('@/components/About.vue')
+  },
+  {
+    path: '/saved-reports',
+    name: 'SavedReports',
+    component: () => import('@/components/InProgress.vue'),
+    props: {
+      pageName: 'Saved Reports',
+      completionDate: 'May 21, 2025',
+      defaultProgress: 80
+    },
+  },
+  {
+    path: '/settings',
+      name: 'Settings',
+    component: () => import('@/components/InProgress.vue'),
+    props: {
+      pageName: 'Settings',
+      completionDate: 'May 21, 2025',
+      defaultProgress: 95
+    },
+  },
+  {
+    path: '/support',
+      name: 'support',
+    component: () => import('@/components/InProgress.vue'),
+    props: {
+      pageName: 'support',
+      completionDate: 'May 21, 2025',
+      defaultProgress: 20
+    },
   },
 ];
 

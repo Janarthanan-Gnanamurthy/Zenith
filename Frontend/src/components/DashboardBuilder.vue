@@ -1,8 +1,5 @@
 <template>
 	<div class="min-h-screen bg-gray-50">
-		<!-- Navigation Bar -->
-		<NavBar />
-		
 		<!-- Main Content -->
 		<div class="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
 			<!-- Loading State -->
@@ -16,10 +13,10 @@
 					<h2 class="text-xl font-semibold mb-2">No Data Available</h2>
 					<p class="text-gray-600 mb-6">Upload your dataset to start building interactive dashboards.</p>
 					<button 
-						@click="router.push({ name: 'DataProcessor' })" 
+						@click="showFileUploadModal = true" 
 						class="btn btn-primary btn-lg w-full"
 					>
-						Go to Data Upload
+						Upload CSV Data
 					</button>
 				</div>
 			</div>
@@ -31,7 +28,24 @@
 						<h1 class="text-3xl font-bold text-gray-900">Dashboard Builder</h1>
 						<span class="badge badge-primary">Beta</span>
 					</div>
-					<div>
+					<div class="flex items-center gap-2">
+						<button
+							@click="showFileUploadModal = true"
+							class="btn btn-outline btn-primary"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+							</svg>
+							Upload New Data
+						</button>
+						<button
+							@click="saveDashboardToFirebase"
+							class="btn btn-success"
+							:disabled="dashboardWidgets.length === 0 || isSaving"
+						>
+							<span v-if="isSaving" class="loading loading-spinner loading-xs mr-2"></span>
+							Save Dashboard
+						</button>
 						<DeployDashboard 
 							v-if="dashboardWidgets.length > 0" 
 							:dashboardWidgets="dashboardWidgets" 
@@ -341,12 +355,107 @@
 				</div>
 			</div>
 		</div>
+		
+		<!-- File Upload Modal -->
+		<div 
+			v-if="showFileUploadModal" 
+			class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+			@click.self="showFileUploadModal = false"
+		>
+			<div class="bg-white rounded-xl shadow-lg w-full max-w-xl max-h-[90vh] overflow-y-auto">
+				<div class="sticky top-0 bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-white rounded-t-xl">
+					<div class="flex items-center justify-between">
+						<h2 class="text-2xl font-bold mb-2 flex items-center gap-2">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+							</svg>
+							Upload CSV Data
+						</h2>
+						<button @click="showFileUploadModal = false" class="btn btn-sm btn-circle btn-ghost text-white">
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+					<p class="opacity-80">Upload and process your CSV files to create dashboards</p>
+				</div>
+				
+				<div class="p-6">
+					<div class="flex flex-col items-center justify-center w-full">
+						<label class="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl cursor-pointer border-primary/30 bg-base-200/30 hover:bg-base-200/50 transition-all">
+							<div class="flex flex-col items-center justify-center pt-5 pb-6">
+								<div class="mb-3 text-primary">
+									<svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+									</svg>
+								</div>
+								<p class="mb-2 text-sm font-medium text-gray-700">
+									<span class="font-semibold">Click to upload</span> or drag and drop
+								</p>
+								<p class="text-xs text-gray-500">CSV files only (MAX 10MB)</p>
+							</div>
+							<input 
+								type="file" 
+								class="hidden" 
+								@change="handleFileUpload" 
+								accept=".csv" 
+							/>
+						</label>
+					</div>
+
+					<!-- File Selection Info -->
+					<div v-if="uploadedFiles.length > 0" class="mt-6 space-y-3">
+						<h3 class="font-medium text-gray-700 flex items-center gap-2">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-primary">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+							</svg>
+							Selected Files ({{ uploadedFiles.length }})
+						</h3>
+						
+						<div class="divide-y divide-gray-200 border border-gray-200 rounded-lg overflow-hidden">
+							<div v-for="(file, index) in uploadedFiles" :key="index" 
+								class="flex items-center justify-between p-3 bg-white hover:bg-gray-50">
+								<div class="flex items-center gap-3">
+									<div class="badge badge-primary">CSV</div>
+									<span class="font-medium text-sm">{{ file.name }}</span>
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="text-xs text-gray-500">{{ formatFileSize(file.size) }}</span>
+									<button @click="removeFile(index)" class="btn btn-circle btn-ghost btn-xs text-error">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					
+					<div class="mt-6 flex justify-end space-x-2">
+						<button 
+							@click="showFileUploadModal = false" 
+							class="btn btn-ghost"
+						>
+							Cancel
+						</button>
+						<button 
+							@click="processUploadedFiles" 
+							class="btn btn-primary"
+							:disabled="uploadedFiles.length === 0 || isUploading"
+						>
+							<span v-if="isUploading" class="loading loading-spinner loading-sm mr-2"></span>
+							{{ isUploading ? 'Processing...' : 'Load Data' }}
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
 	</div>
 </template>
 
 <script>
 import { defineComponent } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useDataStore } from '@/stores/datasetStore';
 import ChartWidget from './widgets/ChartWidget.vue';
 import TableWidget from './widgets/TableWidget.vue';
@@ -354,8 +463,10 @@ import InsightWidget from './widgets/InsightWidget.vue';
 import StatWidget from './widgets/StatWidget.vue';
 import { apiClient } from '@/services/apiService';
 import DeployDashboard from './DeployDashboard.vue';
-import NavBar from './NavBar.vue';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { auth, app } from '@/firebase.js'; // You need to set up this file
 
 export default defineComponent({
 	name: 'DashboardBuilder',
@@ -365,13 +476,13 @@ export default defineComponent({
 		TableWidget,
 		InsightWidget,
 		StatWidget,
-		DeployDashboard,
-		NavBar
+		DeployDashboard
 	},
 
 	setup() {
 		const dataStore = useDataStore();
 		const router = useRouter();
+		const route = useRoute();
 		const debouncedSaveTimeout = ref(null);
 		
 		const debouncedSave = (fn, delay = 500) => {
@@ -389,7 +500,7 @@ export default defineComponent({
 			}
 		});
 		
-		return { dataStore, router, debouncedSave };
+		return { dataStore, router, route, debouncedSave };
 	},
 
 	data() {
@@ -405,7 +516,11 @@ export default defineComponent({
 				{ type: 'stat', label: 'Statistics' }
 			],
 			// Store the authentication token in memory to avoid logout
-			authToken: localStorage.getItem('authToken') || null
+			authToken: localStorage.getItem('authToken') || null,
+			showFileUploadModal: false,
+			uploadedFiles: [],
+			isUploading: false,
+			isSaving: false
 		};
 	},
 
@@ -426,11 +541,6 @@ export default defineComponent({
 	},
 
 	methods: {
-		// Force save on page unload
-		handleBeforeUnload() {
-			this.saveDashboard();
-		},
-	
 		isNumericColumn(columnIndex) {
 			return this.dataStore.rows.some(row => 
 				!isNaN(parseFloat(row[columnIndex])) && row[columnIndex] !== ''
@@ -579,6 +689,128 @@ export default defineComponent({
 			} finally {
 				this.isGenerating = false;
 			}
+		},
+
+		handleFileUpload(event) {
+			const files = Array.from(event.target.files);
+			if (files.length > 0) {
+				this.uploadedFiles = files;
+			}
+		},
+
+		removeFile(index) {
+			this.uploadedFiles.splice(index, 1);
+		},
+		
+		formatFileSize(bytes) {
+			if (bytes === 0) return '0 Bytes';
+			
+			const k = 1024;
+			const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+			const i = Math.floor(Math.log(bytes) / Math.log(k));
+			
+			return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+		},
+
+		async processUploadedFiles() {
+			if (!this.uploadedFiles.length) return;
+			
+			this.isUploading = true;
+			
+			try {
+				// Clear any existing data in the store
+				this.dataStore.clearData();
+				
+				// Clear all existing dashboard widgets since we're loading a new dataset
+				this.dashboardWidgets = [];
+				
+				// Process the first file (for now, we'll just support one file)
+				const file = this.uploadedFiles[0];
+				const text = await file.text();
+				const lines = text.trim().split('\n');
+				const headers = lines[0].split(',').map(header => header.trim());
+				
+				const rows = [];
+				for (let i = 1; i < lines.length; i++) {
+					if (lines[i].trim()) {
+						const values = lines[i].split(',').map(value => value.trim());
+						rows.push(values);
+					}
+				}
+				
+				// Store the data in the data store
+				this.dataStore.setHeaders(headers);
+				this.dataStore.setRows(rows);
+				
+				// Save the empty dashboard layout
+				this.saveDashboard();
+				
+				// Close the modal
+				this.showFileUploadModal = false;
+				
+				// Clear uploaded files
+				this.uploadedFiles = [];
+				
+			} catch (error) {
+				console.error('Error processing file:', error);
+				alert('Error processing file. Please try again with a different file.');
+			} finally {
+				this.isUploading = false;
+			}
+		},
+
+		// Force save on page unload
+		handleBeforeUnload() {
+			this.saveDashboard();
+		},
+
+		async saveDashboardToFirebase() {
+			this.isSaving = true;
+			try {
+				const auth = getAuth(app);
+				const user = auth.currentUser;
+				if (!user) {
+					alert('You must be logged in to save dashboards.');
+					this.isSaving = false;
+					return;
+				}
+				const db = getFirestore(app);
+				const dashboardsRef = collection(db, 'users', user.uid, 'dashboards');
+
+				// Convert rows (array of arrays) to array of objects
+				const headers = this.dataStore.headers;
+				const rows = this.dataStore.rows.map(rowArr => {
+					const rowObj = {};
+					headers.forEach((header, idx) => {
+						rowObj[header] = rowArr[idx];
+					});
+					return rowObj;
+				});
+
+				const cleanWidgets = JSON.parse(JSON.stringify(this.dashboardWidgets, (key, value) => {
+					// Remove undefined/null
+					if (value === undefined || value === null) return undefined;
+					// Prevent nested arrays
+					if (Array.isArray(value)) {
+						return value.filter(v => v !== undefined && v !== null && !Array.isArray(v));
+					}
+					return value;
+				}));
+
+				const dashboardData = {
+					widgets: cleanWidgets,
+					headers: headers,
+					rows: rows,
+					createdAt: new Date(),
+					name: cleanWidgets[0]?.config?.title || 'Untitled Dashboard'
+				};
+				await addDoc(dashboardsRef, dashboardData);
+				alert('Dashboard saved!');
+			} catch (e) {
+				console.error(e);
+				alert('Failed to save dashboard.');
+			}
+			this.isSaving = false;
 		}
 	}
 });
@@ -603,7 +835,7 @@ export default defineComponent({
 
 /* Better focus styles for inputs */
 .input:focus, .select:focus {
-  border-color: theme('colors.primary');
+  border-color: #000;
   box-shadow: 0 0 0 2px rgba(var(--p), 0.2);
 }
 

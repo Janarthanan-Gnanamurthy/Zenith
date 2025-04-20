@@ -30,6 +30,24 @@ export const useDataStore = defineStore('data', {
       }))
     },
     
+    setHeaders(headers) {
+      this.headers = headers
+      
+      // Update sessionStorage
+      const currentData = JSON.parse(sessionStorage.getItem('dataStore') || '{}')
+      currentData.headers = headers
+      sessionStorage.setItem('dataStore', JSON.stringify(currentData))
+    },
+    
+    setRows(rows) {
+      this.rows = rows
+      
+      // Update sessionStorage
+      const currentData = JSON.parse(sessionStorage.getItem('dataStore') || '{}')
+      currentData.rows = rows
+      sessionStorage.setItem('dataStore', JSON.stringify(currentData))
+    },
+    
     setProcessedData(processedData) {
       this.processedData = processedData
       

@@ -1,4 +1,4 @@
-# 📊 Datafy AI Data Analysis Dashboard
+# 📊 Zenith Powerful Data Analytics and Dashboard builder.
 
 A sophisticated web application that combines data processing, analysis, and visualization capabilities with an intuitive dashboard builder interface. Built with Vue.js and FastAPI, this platform enables users to create custom visualizations and perform complex analyses through a user-friendly interface.
 
