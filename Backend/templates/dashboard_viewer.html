@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ dashboard.name }} - Dashboard Viewer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #f9fafb;
+            color: #111827;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+        }
+        .dashboard-title {
+            letter-spacing: -0.025em;
+        }
+        .dashboard-widget {
+            transition: all 0.2s ease;
+        }
+        .dashboard-widget:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto p-4 md:p-6">
+        <header class="mb-8 bg-white shadow-sm rounded-lg p-4 md:p-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dashboard-title">{{ dashboard.name }}</h1>
+                    <p class="text-gray-500 text-sm mt-1">Shared dashboard</p>
+                </div>
+                <a href="/" class="mt-3 sm:mt-0 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-gray-700 text-sm font-medium transition-colors duration-200">
+                    Back to List
+                </a>
+            </div>
+        </header>
+
+        {% if not dashboard.dataset.headers or not dashboard.dataset.rows or dashboard.dataset.rows|length == 0 %}
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg shadow-sm">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-yellow-700">
+                        This dashboard has no data. Widgets may appear empty or not display properly.
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-4 gap-4 md:gap-6">
+            {% for widget in dashboard.widgets %}
+                <div class="bg-white shadow-sm hover:shadow rounded-lg relative dashboard-widget 
+                    {% if widget.config.size == '1' %}col-span-4 sm:col-span-2 md:col-span-1
+                    {% elif widget.config.size == '2' %}col-span-4 sm:col-span-2
+                    {% elif widget.config.size == '3' %}col-span-4 md:col-span-3
+                    {% else %}col-span-4{% endif %}">
+                    
+                    <!-- Widget Header -->
+                    <div class="px-4 py-3 border-b border-gray-100">
+                        <h3 class="font-medium text-gray-800">{{ widget.config.title }}</h3>
+                    </div>
+                    
+                    <!-- Widget Content -->
+                    <div class="p-4 h-64 md:h-72">
+                        {% if widget.type == 'chart' %}
+                            {% if dashboard.dataset and dashboard.dataset.rows and dashboard.dataset.headers %}
+                                <canvas id="chart-{{ loop.index }}" class="w-full h-full"></canvas>
+                            {% else %}
+                                <div class="flex items-center justify-center h-full bg-gray-50 rounded">
+                                    <p class="text-gray-500 text-center">No data available for this chart</p>
+                                </div>
+                            {% endif %}
+                        {% elif widget.type == 'table' %}
+                            {% if dashboard.dataset and dashboard.dataset.rows and dashboard.dataset.headers %}
+                                <div class="overflow-auto max-h-full">
+                                    <table class="min-w-full divide-y divide-gray-200">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                {% for header in dashboard.dataset.headers %}
+                                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider sticky top-0 bg-gray-50">
+                                                        {{ header }}
+                                                    </th>
+                                                {% endfor %}
+                                            </tr>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-100">
+                                            {% for row in dashboard.dataset.rows %}
+                                                <tr class="hover:bg-gray-50 transition-colors duration-150">
+                                                    {% for cell in row %}
+                                                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-600">
+                                                            {{ cell }}
+                                                        </td>
+                                                    {% endfor %}
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="flex items-center justify-center h-full bg-gray-50 rounded">
+                                    <p class="text-gray-500 text-center">No data available for this table</p>
+                                </div>
+                            {% endif %}
+                        {% elif widget.type == 'stat' %}
+                            <div id="stat-container-{{ loop.index }}" class="h-full">
+                                <canvas id="chart-{{ loop.index }}" style="display:none;"></canvas>
+                                {% if dashboard.dataset and dashboard.dataset.rows and dashboard.dataset.headers %}
+                                    <!-- Statistics will be populated by JavaScript -->
+                                    <div class="flex items-center justify-center h-full">
+                                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                    </div>
+                                {% else %}
+                                    <div class="flex items-center justify-center h-full bg-gray-50 rounded">
+                                        <p class="text-gray-500 text-center">No data available for this statistic</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% elif widget.type == 'insight' %}
+                            {% if widget.config.text %}
+                                <div class="p-4 bg-white rounded border border-gray-100 h-full overflow-auto">
+                                    <p class="text-gray-700 leading-relaxed">{{ widget.config.text }}</p>
+                                </div>
+                            {% else %}
+                                <div class="flex items-center justify-center h-full bg-gray-50 rounded">
+                                    <p class="text-gray-500 text-center">No insight available</p>
+                                </div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        // Initialize charts
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                // Change how we get dashboard data - this is more reliable
+                const dashboardDataElement = document.getElementById('dashboard-data');
+                if (!dashboardDataElement) {
+                    console.error('Dashboard data element not found');
+                    return;
+                }
+                
+                const dashboardData = JSON.parse(dashboardDataElement.textContent);
+                
+                // Check if dataset exists and has data
+                if (!dashboardData.dataset || !dashboardData.dataset.headers || !dashboardData.dataset.rows || dashboardData.dataset.rows.length === 0) {
+                    console.warn('No dataset or empty dataset in dashboard');
+                    return;
+                }
+                
+                const headers = dashboardData.dataset.headers;
+                const rows = dashboardData.dataset.rows;
+                
+                dashboardData.widgets.forEach((widget, index) => {
+                    if (widget.type === 'chart') {
+                        const canvas = document.getElementById(`chart-${index + 1}`);
+                        if (!canvas) return;
+                        
+                        // Extract data for chart
+                        const xColumn = widget.config.xColumn;
+                        const yColumns = widget.config.yColumns || [];
+                        
+                        if (xColumn === undefined || yColumns.length === 0) {
+                            console.warn(`Invalid chart configuration for widget ${index + 1}`);
+                            return;
+                        }
+                        
+                        // Check if x-column and y-columns are valid
+                        if (xColumn >= headers.length) {
+                            console.warn(`X-column index ${xColumn} out of bounds for widget ${index + 1}`);
+                            return;
+                        }
+                        
+                        for (const yCol of yColumns) {
+                            if (yCol >= headers.length) {
+                                console.warn(`Y-column index ${yCol} out of bounds for widget ${index + 1}`);
+                                return;
+                            }
+                        }
+                        
+                        const xData = rows.map(row => row[xColumn]);
+                        const datasets = yColumns.map((yCol, idx) => {
+                            // Modern minimal color palette
+                            const colorPalette = [
+                                '#3b82f6', // blue-500
+                                '#6366f1', // indigo-500
+                                '#8b5cf6', // violet-500
+                                '#ec4899', // pink-500
+                                '#10b981', // emerald-500
+                                '#f97316', // orange-500
+                                '#ef4444', // red-500
+                                '#14b8a6', // teal-500
+                            ];
+                            const color = colorPalette[idx % colorPalette.length];
+                            
+                            return {
+                                label: headers[yCol],
+                                data: rows.map(row => parseFloat(row[yCol]) || 0),
+                                backgroundColor: color + '80', // Adding 80 for transparency
+                                borderColor: color,
+                                borderWidth: 2,
+                                borderRadius: 4,
+                                tension: 0.1, // Slightly curved lines for line charts
+                                hoverBackgroundColor: color, // Solid color on hover
+                                hoverBorderColor: color,
+                                hoverBorderWidth: 3
+                            };
+                        });
+                        
+                        // Create chart
+                        new Chart(canvas, {
+                            type: widget.config.chartType || 'bar',
+                            data: {
+                                labels: xData,
+                                datasets: datasets
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: 'top',
+                                        labels: {
+                                            usePointStyle: true,
+                                            padding: 15
+                                        }
+                                    },
+                                    tooltip: {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                        titleColor: '#1f2937',
+                                        bodyColor: '#4b5563',
+                                        borderColor: '#e5e7eb',
+                                        borderWidth: 1,
+                                        padding: 10,
+                                        boxWidth: 10,
+                                        boxHeight: 10,
+                                        boxPadding: 3,
+                                        usePointStyle: true
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        grid: {
+                                            color: '#f3f4f6',
+                                            borderDash: [4, 4]
+                                        },
+                                        ticks: {
+                                            color: '#6b7280'
+                                        }
+                                    },
+                                    x: {
+                                        grid: {
+                                            display: false
+                                        },
+                                        ticks: {
+                                            color: '#6b7280'
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    } else if (widget.type === 'stat') {
+                        // Process stat widget
+                        const statContainer = document.getElementById(`stat-container-${index + 1}`);
+                        if (!statContainer) return;
+                        
+                        // Find numeric columns for statistics
+                        const numericColumns = [];
+                        for (let i = 0; i < headers.length; i++) {
+                            const hasNumericValues = rows.some(row => 
+                                !isNaN(parseFloat(row[i])) && row[i] !== ''
+                            );
+                            if (hasNumericValues) {
+                                numericColumns.push({
+                                    index: i,
+                                    header: headers[i]
+                                });
+                            }
+                        }
+                        
+                        if (numericColumns.length === 0) {
+                            statContainer.innerHTML = '<div class="flex items-center justify-center h-full bg-gray-50 rounded"><p class="text-gray-500 text-center">No numeric data available for statistics</p></div>';
+                            return;
+                        }
+                        
+                        // If widget has a specific column defined, use only that column
+                        const targetColumns = widget.config.column !== undefined 
+                            ? numericColumns.filter(col => col.index === widget.config.column)
+                            : numericColumns.slice(0, 2); // Otherwise use first two numeric columns
+                        
+                        // Calculate statistics for selected columns
+                        const statistics = [];
+                        targetColumns.forEach(column => {
+                            const values = rows.map(row => parseFloat(row[column.index]))
+                                .filter(val => !isNaN(val));
+                            
+                            if (values.length > 0) {
+                                const sum = values.reduce((acc, val) => acc + val, 0);
+                                const avg = sum / values.length;
+                                const max = Math.max(...values);
+                                const min = Math.min(...values);
+                                
+                                statistics.push(
+                                    { label: `${column.header} (Avg)`, value: avg.toFixed(2) },
+                                    { label: `${column.header} (Max)`, value: max.toFixed(2) },
+                                    { label: `${column.header} (Min)`, value: min.toFixed(2) }
+                                );
+                            }
+                        });
+                        
+                        // Create HTML for statistics
+                        let statsHtml = '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full overflow-auto">';
+                        statistics.forEach(stat => {
+                            statsHtml += `
+                                <div class="p-4 bg-white rounded-lg hover:shadow-md transition duration-200 border border-gray-100 flex flex-col justify-center">
+                                    <div class="text-sm font-medium text-gray-500 mb-2">${stat.label}</div>
+                                    <div class="text-2xl font-bold text-gray-800">${stat.value}</div>
+                                </div>
+                            `;
+                        });
+                        statsHtml += '</div>';
+                        
+                        // Update the container
+                        statContainer.innerHTML = statsHtml;
+                    }
+                });
+            } catch (error) {
+                console.error('Error initializing charts:', error);
+            }
+        });
+        
+        // Helper function to generate random colors
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+    </script>
+    
+    <!-- Add this hidden element to store dashboard data safely -->
+    <div id="dashboard-data" style="display: none;">{{ dashboard|tojson }}</div>
+</body>
+</html> 

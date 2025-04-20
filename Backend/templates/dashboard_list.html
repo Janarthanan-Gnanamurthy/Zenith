@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Viewer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-6">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Shared Dashboards</h1>
+            <p class="text-gray-600">View dashboards that have been shared with you</p>
+        </header>
+
+        <div class="bg-white shadow-md rounded-lg p-6">
+            {% if dashboards %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for dashboard in dashboards %}
+                        <a href="{{ dashboard.url }}" class="block p-4 border rounded-lg hover:shadow-lg transition duration-200">
+                            <h2 class="text-xl font-semibold text-gray-800">{{ dashboard.name }}</h2>
+                            <p class="text-sm text-gray-500 mt-2">{{ dashboard.id }}</p>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-12">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">No dashboards</h3>
+                    <p class="mt-1 text-sm text-gray-500">No dashboards have been shared yet.</p>
+                    <div class="mt-6">
+                        <a href="/" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                            <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Refresh Page
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html> 
