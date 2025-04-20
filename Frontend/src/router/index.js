@@ -41,7 +41,7 @@ const routes = [
     component: () => import('@/components/InProgress.vue'),
     props: {
       pageName: 'Saved Reports',
-      completionDate: 'May 21, 2025',
+      completionDate: 'April 21, 2025',
       defaultProgress: 80
     },
   },
@@ -51,7 +51,7 @@ const routes = [
     component: () => import('@/components/InProgress.vue'),
     props: {
       pageName: 'Settings',
-      completionDate: 'May 21, 2025',
+      completionDate: 'April 21, 2025',
       defaultProgress: 95
     },
   },
@@ -61,7 +61,7 @@ const routes = [
     component: () => import('@/components/InProgress.vue'),
     props: {
       pageName: 'support',
-      completionDate: 'May 21, 2025',
+      completionDate: 'April 21, 2025',
       defaultProgress: 20
     },
   },
