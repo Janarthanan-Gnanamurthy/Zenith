@@ -7,11 +7,11 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 cred_path = os.path.join(current_dir, "serviceAccountKey.json")
 
 # Initialize Firebase Admin
-try:
-    cred = credentials.Certificate(cred_path)
-    firebase_admin.initialize_app(cred)
-except Exception as e:
-    raise Exception(f"Failed to initialize Firebase Admin: {e}")
+# try:
+#     cred = credentials.Certificate(cred_path)
+#     firebase_admin.initialize_app(cred)
+# except Exception as e:
+#     raise Exception(f"Failed to initialize Firebase Admin: {e}")
 
 def verify_firebase_token(id_token):
     """
