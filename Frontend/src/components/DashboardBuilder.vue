@@ -42,6 +42,7 @@
 							@click="saveDashboardToFirebase"
 							class="btn btn-success"
 							:disabled="dashboardWidgets.length === 0 || isSaving"
+							disabled
 						>
 							<span v-if="isSaving" class="loading loading-spinner loading-xs mr-2"></span>
 							Save Dashboard
