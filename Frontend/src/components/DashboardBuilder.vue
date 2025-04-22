@@ -38,7 +38,7 @@
 							</svg>
 							Upload New Data
 						</button>
-						<button
+						<!-- <button
 							@click="saveDashboardToFirebase"
 							class="btn btn-success"
 							:disabled="dashboardWidgets.length === 0 || isSaving"
@@ -46,7 +46,7 @@
 						>
 							<span v-if="isSaving" class="loading loading-spinner loading-xs mr-2"></span>
 							Save Dashboard
-						</button>
+						</button> -->
 						<DeployDashboard 
 							v-if="dashboardWidgets.length > 0" 
 							:dashboardWidgets="dashboardWidgets" 

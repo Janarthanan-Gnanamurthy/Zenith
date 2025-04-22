@@ -1,37 +1,6 @@
 <template>
 	<div class="flex flex-col relative h-screen">
-	  
-	  <!-- Modal Container (relative to this page only) -->
-	  <div class="absolute inset-0 z-50 flex items-center justify-center">
 		
-		<!-- Only blur the content behind modal (not the full screen) -->
-		<div
-		  class="absolute inset-0 bg-black/30 backdrop-blur-md rounded-xl"
-		  @click="close"
-		></div>
-  
-		<!-- Modal Box -->
-		<div
-		  class="relative z-10 bg-base-100 max-w-lg w-full p-6 rounded-2xl shadow-lg text-center"
-		>
-		  <h2 class="text-2xl font-bold text-primary mb-4">
-			🚀 Important Alert
-		  </h2>
-		  <p class="text-base-content text-md leading-relaxed">
-			This page showcases one of our most groundbreaking features — we use
-			<span class="font-semibold text-purple-600">Large Language Models (LLMs)</span>
-			locally to analyze your data to ensure Privacy and Security.
-			<br /><br />
-			Along with LLMs, we're leveraging
-			<span class="font-semibold text-indigo-600">Apache Spark</span> and
-			<span class="font-semibold text-indigo-600">Hadoop</span> for scalable processing.
-			<br /><br />
-        Honestly, deploying this is a huge challenge — I'm just a student and can't afford pricey servers — but I promise this works <span class="font-semibold text-green-600">100%</span>. 🔥
-        <br /><br />
-			Can’t wait to share this in the next round. So until then... <span class="italic">Check out the Dashboard Builder... If anything goes wrong please refresh the page</span>
-		  </p>
-		</div>
-	  </div>
 		<!-- Page Content -->
 		<main class="flex-1 overflow-y-auto">
 			<div class="container mx-auto px-4 py-8">
