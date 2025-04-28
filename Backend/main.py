@@ -12,7 +12,10 @@ app = FastAPI(title="Datafy API")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Your Vue.js frontend
+    allow_origins=[
+        "http://localhost:5173",  # Local development environment
+        "https://zenith-ed.netlify.app"  # Production frontend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

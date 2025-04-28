@@ -184,7 +184,8 @@ export default defineComponent({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(dashboardData)
+          body: JSON.stringify(dashboardData),
+          mode: 'cors'
         });
         
         if (!response.ok) {

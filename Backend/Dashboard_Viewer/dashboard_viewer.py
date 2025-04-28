@@ -6,7 +6,8 @@ import uuid
 from flask_cors import CORS
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
-CORS(app)  # Enable CORS for all routes
+# Enable CORS for specific origins
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "https://zenith-ed.netlify.app"]}})
 
 # Directory where dashboard files are stored
 DASHBOARD_DIR = Path("dashboards")
