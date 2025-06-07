@@ -1,9 +1,8 @@
 import gradio as gr
 import pandas as pd
 import json
-from agents import analyze_data_with_agent
+from agents import analyze_data_with_agent # Assuming 'agents' module is available
 import io
-import base64
 import asyncio
 import logging
 
@@ -35,11 +34,11 @@ async def process_data_and_prompt(file, prompt):
         
         # Show data preview
         data_preview = f"""
-        <div style="margin-bottom: 20px;">
+        <div class="data-section">
             <h3>Data Preview</h3>
             <p><strong>Shape:</strong> {df.shape[0]} rows × {df.shape[1]} columns</p>
             <p><strong>Columns:</strong> {', '.join(df.columns.tolist())}</p>
-            {df.head().to_html(classes='table table-striped', table_id='data-preview')}
+            {df.head().to_html(classes='table data-table', table_id='data-preview')}
         </div>
         """
 
@@ -51,8 +50,8 @@ async def process_data_and_prompt(file, prompt):
         # Handle different result types
         if result["type"] == "error":
             error_html = f"""
-            <div style="background-color: #fee; border: 1px solid #fcc; padding: 15px; border-radius: 5px; margin-top: 20px;">
-                <h3 style="color: #c00;">Error</h3>
+            <div class="error-box">
+                <h3>Error</h3>
                 <p><strong>Message:</strong> {result['message']}</p>
                 {f"<p><strong>Suggestions:</strong></p><ul>{''.join([f'<li>{s}</li>' for s in result.get('suggestions', [])])}</ul>" if result.get('suggestions') else ""}
             </div>
@@ -64,11 +63,11 @@ async def process_data_and_prompt(file, prompt):
             image_base64 = result.get("image")
             if image_base64:
                 chart_html = f"""
-                <div style="margin-top: 20px;">
+                <div class="analysis-result">
                     <h3>Visualization Result</h3>
                     <p><strong>Chart Type:</strong> {result.get('chart_type', 'Unknown').title()}</p>
-                    <div style="text-align: center; margin: 20px 0;">
-                        <img src="data:image/png;base64,{image_base64}" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 5px;">
+                    <div class="chart-container">
+                        <img src="data:image/png;base64,{image_base64}" class="chart-image">
                     </div>
                     <p><em>{result.get('message', 'Visualization created successfully')}</em></p>
                 </div>
@@ -80,9 +79,9 @@ async def process_data_and_prompt(file, prompt):
         elif result["type"] == "statistical":
             # Format statistical results
             stat_html = f"""
-            <div style="margin-top: 20px;">
+            <div class="analysis-result">
                 <h3>Statistical Analysis Results</h3>
-                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                <div class="stat-output-box">
                     {result.get('data', 'No statistical results available')}
                 </div>
                 <p><em>{result.get('message', 'Statistical analysis completed')}</em></p>
@@ -99,18 +98,18 @@ async def process_data_and_prompt(file, prompt):
                 transformed_df.to_csv(csv_buffer, index=False)
                 csv_data = csv_buffer.getvalue()
                 
-                # Create temporary file for download
-                temp_file = "transformed_data.csv"
-                with open(temp_file, 'w') as f:
+                # Create temporary file for download (Gradio handles temporary files for downloads)
+                temp_file_name = "transformed_data.csv"
+                with open(temp_file_name, 'w', encoding='utf-8') as f:
                     f.write(csv_data)
                 
                 transform_html = f"""
-                <div style="margin-top: 20px;">
+                <div class="analysis-result">
                     <h3>Data Transformation Results</h3>
                     <p><strong>Original Shape:</strong> {df.shape[0]} rows × {df.shape[1]} columns</p>
                     <p><strong>New Shape:</strong> {result.get('shape', 'Unknown')}</p>
                     <p><strong>New Columns:</strong> {', '.join(result.get('columns', []))}</p>
-                    <div style="background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                    <div class="transformed-data-preview">
                         <h4>Preview of Transformed Data:</h4>
                         {result.get('preview', 'No preview available')}
                     </div>
@@ -118,7 +117,7 @@ async def process_data_and_prompt(file, prompt):
                     <p><strong>Download the transformed data using the button below.</strong></p>
                 </div>
                 """
-                return data_preview + transform_html, temp_file, None
+                return data_preview + transform_html, temp_file_name, None
             else:
                 return data_preview + "<p>Error: Could not retrieve transformed data</p>", None, None
         
@@ -128,8 +127,8 @@ async def process_data_and_prompt(file, prompt):
     except Exception as e:
         logger.error(f"Error processing data: {str(e)}")
         error_html = f"""
-        <div style="background-color: #fee; border: 1px solid #fcc; padding: 15px; border-radius: 5px;">
-            <h3 style="color: #c00;">Processing Error</h3>
+        <div class="error-box">
+            <h3>Processing Error</h3>
             <p><strong>Error:</strong> {str(e)}</p>
             <p><strong>Please check:</strong></p>
             <ul>
@@ -145,14 +144,16 @@ async def process_data_and_prompt(file, prompt):
 def process_sync(file, prompt):
     """Synchronous wrapper for the async processing function."""
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Check if an event loop is already running
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         return loop.run_until_complete(process_data_and_prompt(file, prompt))
     except Exception as e:
         logger.error(f"Error in sync wrapper: {str(e)}")
         return f"Error: {str(e)}", None, None
-    finally:
-        loop.close()
 
 def generate_preview(file):
     """Generate a preview of the uploaded file."""
@@ -175,11 +176,11 @@ def generate_preview(file):
         
         # Show data preview
         data_preview = f"""
-        <div style="margin-bottom: 20px;">
+        <div class="data-section">
             <h3>Data Preview</h3>
             <p><strong>Shape:</strong> {df.shape[0]} rows × {df.shape[1]} columns</p>
             <p><strong>Columns:</strong> {', '.join(df.columns.tolist())}</p>
-            {df.head().to_html(classes='table table-striped', table_id='data-preview')}
+            {df.head().to_html(classes='table data-table', table_id='data-preview')}
         </div>
         """
         return data_preview
@@ -215,28 +216,121 @@ sample_prompts = {
 # Create the Gradio interface
 with gr.Blocks(
     title="Data Analysis Agent",
-    theme=gr.themes.Soft(),
+    theme=gr.themes.Soft(), # Consider gr.themes.Monochrome() or gr.themes.Glass() for more explicit dark mode support, or customize Soft.
     css="""
+    /* General container styling */
     .gradio-container {
         max-width: 1200px;
         margin: auto;
     }
+
+    /* Base table styling for both light and dark mode */
     .table {
         width: 100%;
         border-collapse: collapse;
         margin: 15px 0;
+        font-size: 0.9em;
     }
     .table th, .table td {
-        border: 1px solid #ddd;
+        border: 1px solid var(--border-color-primary); /* Use Gradio's CSS variables */
         padding: 8px;
         text-align: left;
     }
     .table th {
-        background-color: #f2f2f2;
+        background-color: var(--background-fill-secondary); /* Use Gradio's CSS variables */
         font-weight: bold;
     }
     .table-striped tr:nth-child(even) {
-        background-color: #f9f9f9;
+        background-color: var(--background-fill-hover); /* Use Gradio's CSS variables */
+    }
+
+    /* Specific styling for data preview and transformed data tables */
+    .data-table {
+        color: var(--text-color-body);
+        background-color: var(--background-fill-primary);
+    }
+    .data-table th {
+        color: var(--text-color-body);
+    }
+    .data-table td {
+        color: var(--text-color-body);
+    }
+
+    /* Styling for the HTML content boxes */
+    .data-section, .analysis-result {
+        margin-bottom: 20px;
+        padding: 15px;
+        border-radius: 8px;
+        background-color: var(--background-fill-secondary);
+        border: 1px solid var(--border-color-primary);
+    }
+
+    .data-section h3, .analysis-result h3 {
+        color: var(--text-color-body);
+        margin-top: 0;
+        margin-bottom: 10px;
+    }
+
+    /* Error box styling */
+    .error-box {
+        background-color: var(--color-error-soft); /* Using Gradio's error color variable */
+        border: 1px solid var(--color-error-border);
+        padding: 15px;
+        border-radius: 5px;
+        margin-top: 20px;
+        color: var(--color-error-text);
+    }
+    .error-box h3 {
+        color: var(--color-error-text);
+    }
+    .error-box ul {
+        margin-top: 10px;
+        padding-left: 20px;
+    }
+
+    /* Visualization specific styling */
+    .chart-container {
+        text-align: center;
+        margin: 20px 0;
+        background-color: var(--background-fill-primary); /* Ensures background is appropriate for charts */
+        padding: 10px;
+        border-radius: 5px;
+    }
+    .chart-image {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--border-color-accent);
+        border-radius: 5px;
+    }
+
+    /* Statistical output box styling */
+    .stat-output-box {
+        background-color: var(--background-fill-primary);
+        padding: 15px;
+        border-radius: 5px;
+        margin: 10px 0;
+        color: var(--text-color-body); /* Ensure text is readable */
+        border: 1px solid var(--border-color-primary);
+    }
+
+    /* Transformed data preview styling */
+    .transformed-data-preview {
+        background-color: var(--background-fill-primary);
+        padding: 15px;
+        border-radius: 5px;
+        margin: 10px 0;
+        color: var(--text-color-body);
+        border: 1px solid var(--border-color-primary);
+    }
+    .transformed-data-preview h4 {
+        color: var(--text-color-body);
+        margin-top: 0;
+        margin-bottom: 10px;
+    }
+
+    /* General text colors to ensure readability in dark mode */
+    h1, h2, h3, h4, p, strong, li {
+        color: var(--text-color-body);
     }
     """
 ) as demo:
@@ -277,19 +371,19 @@ with gr.Blocks(
             with gr.Accordion("Visualization Examples", open=False):
                 for prompt in sample_prompts["Visualization"]:
                     gr.Button(prompt, size="sm").click(
-                        lambda p=prompt: p, outputs=prompt_input
+                        lambda p=prompt: p, inputs=[], outputs=prompt_input, queue=False
                     )
             
             with gr.Accordion("Statistical Analysis Examples", open=False):
                 for prompt in sample_prompts["Statistical Analysis"]:
                     gr.Button(prompt, size="sm").click(
-                        lambda p=prompt: p, outputs=prompt_input
+                        lambda p=prompt: p, inputs=[], outputs=prompt_input, queue=False
                     )
             
             with gr.Accordion("Data Transformation Examples", open=False):
                 for prompt in sample_prompts["Data Transformation"]:
                     gr.Button(prompt, size="sm").click(
-                        lambda p=prompt: p, outputs=prompt_input
+                        lambda p=prompt: p, inputs=[], outputs=prompt_input, queue=False
                     )
             
             submit_btn = gr.Button("🚀 Analyze Data", variant="primary", size="lg")

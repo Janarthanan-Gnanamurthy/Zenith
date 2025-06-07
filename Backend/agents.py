@@ -18,7 +18,10 @@ import warnings
 import io
 import base64
 import tempfile
-warnings.filterwarnings('ignore')
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -27,9 +30,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Ollama configuration
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+# Gemini API configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-preview-05-20")
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+if not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY environment variable is required")
 
 # Define the agent state
 class AgentState(TypedDict):
@@ -45,29 +52,75 @@ class AgentState(TypedDict):
     next_action: str
     plot_path: str
 
-async def generate_with_ollama(prompt, temperature=0.2):
-    """Generate response using Ollama with the specified model."""
-    url = f"{OLLAMA_BASE_URL}/api/generate"
+async def generate_with_gemini(prompt, temperature=0.2):
+    """Generate response using Gemini API."""
+    url = f"{GEMINI_BASE_URL}/{GEMINI_MODEL}:generateContent"
+    
+    headers = {
+        "Content-Type": "application/json",
+    }
     
     payload = {
-        "model": MODEL_NAME,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
             "temperature": temperature,
-            "top_p": 0.95,
-        }
+            "topP": 0.95,
+            "topK": 40,
+            "maxOutputTokens": 8192,
+        },
+        "safetySettings": [
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH", 
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            },
+            {
+                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            }
+        ]
     }
     
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(
+                url, 
+                json=payload, 
+                headers=headers,
+                params={"key": GEMINI_API_KEY}
+            )
             response.raise_for_status()
             result = response.json()
-            return result.get("response", "")
+            
+            # Extract text from Gemini response
+            if "candidates" in result and len(result["candidates"]) > 0:
+                candidate = result["candidates"][0]
+                if "content" in candidate and "parts" in candidate["content"]:
+                    return candidate["content"]["parts"][0].get("text", "")
+            
+            return ""
+            
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error from Gemini API: {e.response.status_code} - {e.response.text}")
+        raise HTTPException(status_code=e.response.status_code, detail=f"Gemini API error: {e.response.text}")
     except Exception as e:
-        logger.error(f"Error generating response with Ollama: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating response with Ollama: {str(e)}")
+        logger.error(f"Error generating response with Gemini: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating response with Gemini: {str(e)}")
 
 def create_chart(df: pd.DataFrame, chart_config: Dict) -> str:
     """Create a matplotlib chart and return the base64 encoded image."""
@@ -183,7 +236,7 @@ Example response format:
 {json.dumps(response_format)}"""
 
     try:
-        json_text = await generate_with_ollama(input_text, temperature=0.4)
+        json_text = await generate_with_gemini(input_text, temperature=0.4)
         
         # Try to extract JSON from markdown code blocks if present
         json_match = re.search(r"```(?:json)?\n(.*?)\n```", json_text, re.DOTALL)
@@ -252,7 +305,7 @@ Example response format:
 Provide only the JSON configuration, no explanations."""
 
     try:
-        json_text = await generate_with_ollama(input_text, temperature=0.5)
+        json_text = await generate_with_gemini(input_text, temperature=0.5)
         
         json_match = re.search(r"```(?:json)?\n(.*?)\n```", json_text, re.DOTALL)
         if json_match:
@@ -378,7 +431,7 @@ transformed_df = transformed_df.fillna(0)  # Handle nulls
 Provide only the code, no explanations. DO NOT DEFINE functions, directly perform the operations on the df."""
 
     try:
-        code = await generate_with_ollama(input_text, temperature=0.4)
+        code = await generate_with_gemini(input_text, temperature=0.4)
         
         code_match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
         code = code_match.group(1) if code_match else code
@@ -479,7 +532,7 @@ stat_result = {'t_statistic': t_stat, 'p_value': p_value}
 Provide only the code, no explanations. DO NOT DEFINE functions."""
 
     try:
-        code = await generate_with_ollama(input_text, temperature=0.3)
+        code = await generate_with_gemini(input_text, temperature=0.3)
         
         code_match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
         code = code_match.group(1) if code_match else code
