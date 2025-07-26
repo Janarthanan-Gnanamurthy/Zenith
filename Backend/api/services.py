@@ -6,18 +6,19 @@ from typing import List, Dict, Any
 import pandas as pd
 import numpy as np
 from scipy import stats
+from scipy.spatial.distance import pdist, squareform
+from scipy.cluster.hierarchy import linkage, dendrogram
 import os
 import re
 import google.generativeai as genai
 from datetime import datetime
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.types import *
-from pyspark.ml.stat import Correlation
-from pyspark.ml.feature import VectorAssembler
-from pyspark.ml.linalg import Vectors
+from sklearn.preprocessing import StandardScaler
 from dotenv import load_dotenv
-from agents import analyze_prompt_intent, get_chart_config, get_transformation_code, get_statistical_code
+from agents import (
+    analyze_prompt_intent, get_chart_config, get_transformation_code, get_statistical_code, 
+    execute_code_safely, GenerationRequest, IntentType, ChartConfig as AgentChartConfig, 
+    PromptIntentResponse
+)
 import uuid
 import json
 
@@ -30,23 +31,13 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# Initialize Spark with HDFS configuration
-spark = SparkSession.builder \
-    .appName("DataTransformation") \
-    .config("spark.hadoop.fs.defaultFS", os.getenv("HDFS_NAMENODE_URL", "hdfs://0.0.0.0:19000")) \
-    .getOrCreate()
-
-# Define HDFS base path for storing files
-# HDFS_BASE_PATH = os.getenv("HDFS_BASE_PATH", "/tmp/uploads")
+# Local filesystem base path for storing files
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 router = APIRouter()
 
-class ChartConfig(BaseModel):
-    x_axis: str
-    y_axis: str
-    aggregation: str
-    chart_type: str
-    title: str
+
 
 def process_chart_data(data: List[Dict], config: Dict) -> Dict:
     """Process data according to chart configuration, handling large numbers."""
@@ -114,76 +105,40 @@ def process_chart_data(data: List[Dict], config: Dict) -> Dict:
     logger.info(f"Chart configuration generated: {chart_config}")
     return chart_config
 
-def execute_transformation(code: str, df) -> pd.DataFrame:
-    """Execute PySpark transformation code."""
-    logger.info(f"Executing transformation code:\n{code}")
-    try:
-        # Create a restricted global environment
-        allowed_globals = {
-            'spark': spark,
-            'F': F,
-            'df': df,
-            'datetime': datetime
-        }
-
-        # Execute the transformation code
-        exec(code, allowed_globals)
-        transformed_df = allowed_globals.get('transformed_df')
-
-        if transformed_df is None:
-            raise ValueError("Transformation did not produce a result")
-
-        logger.info("Transformation successful, resulting DataFrame:")
-        transformed_df.show()
-        return transformed_df.toPandas()
-    except Exception as e:
-        logger.error(f"Error executing transformation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error executing transformation: {str(e)}")
-
-# def store_file_in_hdfs(local_path, file_name):
-#     """Store a file in HDFS and return the HDFS path"""
-#     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S%f')
-#     hdfs_dir = f"{HDFS_BASE_PATH}/{timestamp}"
-#     hdfs_path = f"{hdfs_dir}/{file_name}"
+def save_user_data(user_id: str, file_name: str, data: pd.DataFrame) -> str:
+    """Save user data locally with user ID for future cloud migration.
     
-#     # Create directory in HDFS
-#     try:
-#         # Check if directory exists
-#         dir_exists = spark._jvm.org.apache.hadoop.fs.FileSystem.get(
-#             spark._jsc.hadoopConfiguration()
-#         ).exists(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
+    Args:
+        user_id: Unique identifier for the user
+        file_name: Original file name
+        data: DataFrame containing the data to save
         
-#         if not dir_exists:
-#             # Create directory
-#             spark._jvm.org.apache.hadoop.fs.FileSystem.get(
-#                 spark._jsc.hadoopConfiguration()
-#             ).mkdirs(spark._jvm.org.apache.hadoop.fs.Path(hdfs_dir))
-            
-#         logger.info(f"Created HDFS directory: {hdfs_dir}")
-#     except Exception as e:
-#         logger.error(f"Error creating HDFS directory: {str(e)}")
-#         raise HTTPException(status_code=500, detail=f"Error creating HDFS directory: {str(e)}")
+    Returns:
+        str: Path where the data was saved
+    """
+    # Create user directory if it doesn't exist
+    user_dir = os.path.join(UPLOAD_FOLDER, user_id)
+    os.makedirs(user_dir, exist_ok=True)
     
-#     # Copy file to HDFS
-#     try:
-#         spark._jvm.org.apache.hadoop.fs.FileUtil.copy(
-#             spark._jvm.java.io.File(local_path),
-#             spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration()),
-#             spark._jvm.org.apache.hadoop.fs.Path(hdfs_path),
-#             True  # Delete source
-#         )
-#         logger.info(f"Stored file in HDFS at: {hdfs_path}")
-#         return hdfs_path
-#     except Exception as e:
-#         logger.error(f"Error storing file in HDFS: {str(e)}")
-#         raise HTTPException(status_code=500, detail=f"Error storing file in HDFS: {str(e)}")
+    # Create a unique filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_base = os.path.splitext(file_name)[0]
+    save_path = os.path.join(user_dir, f"{file_base}_{timestamp}.parquet")
+    
+    # Save as parquet for efficient storage
+    data.to_parquet(save_path, index=False)
+    logger.info(f"Saved user data to: {save_path}")
+    return save_path
 
 @router.post("/process")
-async def process_data(files: List[UploadFile] = File(...), prompt: str = Form(...)):
+async def process_data(
+    files: List[UploadFile] = File(...),
+    prompt: str = Form(...),
+    user_id: str = Form("anonymous")  # Default to 'anonymous' if not provided
+) -> Dict[str, Any]:
     """
-    Process multiple files and a prompt, storing files in Hadoop.
+    Process multiple files and a prompt, storing files locally.
     """
-    hadoop_paths = []
     try:
         if not files:
             raise HTTPException(status_code=400, detail="No files provided")
@@ -192,120 +147,112 @@ async def process_data(files: List[UploadFile] = File(...), prompt: str = Form(.
         # Process each uploaded file
         for file in files:
             extension = os.path.splitext(file.filename)[-1].lower()
+            logger.info(f"Processing file: {file.filename} with extension: {extension}")
 
-            # Create a unique Hadoop path
-            hadoop_path = f"{os.getenv('HDFS_BASE_PATH', '/tmp/uploads')}/temp_{datetime.now().strftime('%Y%m%d_%H%M%S%f')}_{file.filename}"
-            hadoop_paths.append(hadoop_path)
-            logger.info(f"Saving file {file.filename} to Hadoop path: {hadoop_path}")
-
-            # Read the file content and save it to Hadoop
+            # Read file content
             file_content = await file.read()
-            rdd = spark.sparkContext.parallelize([file_content])
-            rdd.saveAsTextFile(hadoop_path)
+            
+            # Save file locally temporarily
+            file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+            with open(file_path, 'wb') as f:
+                f.write(file_content)
+            
+            try:
+                # Read file into pandas DataFrame based on extension
+                if extension == '.csv':
+                    part_df = pd.read_csv(file_path)
+                elif extension in ['.xlsx', '.xls']:
+                    part_df = pd.read_excel(file_path)
+                elif extension == '.json':
+                    part_df = pd.read_json(file_path)
+                else:
+                    raise HTTPException(status_code=400, detail=f"Unsupported file type: {extension}")
+                
+                logger.info(f"Loaded DataFrame from {file.filename} with columns: {part_df.columns.tolist()}")
 
-            # Load the file from Hadoop into a Spark DataFrame
-            if extension == '.csv':
-                part_df = spark.read.csv(hadoop_path, header=True, inferSchema=True)
-            elif extension in ['.xlsx', '.xls']:
-                # Read from hdfs to local, and then read excel using pandas, and then convert to spark dataframe.
-                local_path = f"/tmp/{file.filename}"
-                spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration()).copyToLocalFile(
-                    spark._jvm.org.apache.hadoop.fs.Path(hadoop_path+"/part-00000"),
-                    spark._jvm.org.apache.hadoop.fs.Path(local_path)
-                )
+                # Clean column names
+                clean_columns = {}
+                for col in part_df.columns:
+                    clean_col = re.sub(r'[^\w\s]', '', str(col)).strip().lower().replace(' ', '_')
+                    clean_columns[col] = clean_col
+                
+                part_df = part_df.rename(columns=clean_columns)
+                logger.info(f"Cleaned columns for {file.filename}: {part_df.columns.tolist()}")
+                
+                df_list.append(part_df)
+                
+            except Exception as e:
+                logger.error(f"Error processing file {file.filename}: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"Error processing file {file.filename}: {str(e)}")
+            
+            finally:
+                # Clean up the temporary file
+                if os.path.exists(file_path):
+                    os.remove(file_path)
 
-                pandas_df = pd.read_excel(local_path)
-                part_df = spark.createDataFrame(pandas_df)
-                os.remove(local_path)
-
-            elif extension == '.json':
-                part_df = spark.read.json(hadoop_path)
-            else:
-                raise HTTPException(status_code=400, detail="Unsupported file type")
-            logger.info(f"Loaded DataFrame from {file.filename} with columns: {part_df.columns}")
-
-            # Clean column names
-            for old_col in part_df.columns:
-                new_col = re.sub(r'[^\w\s]', '', old_col).strip().lower().replace(' ', '_')
-                part_df = part_df.withColumnRenamed(old_col, new_col)
-            logger.info(f"Cleaned columns for {file.filename}: {part_df.columns}")
-            df_list.append(part_df)
-
-        # Combine all DataFrames using unionByName (allowing missing columns)
-        combined_df = df_list[0]
-        for part_df in df_list[1:]:
-            combined_df = combined_df.unionByName(part_df, allowMissingColumns=True)
-
-        logger.info(f"Combined DataFrame columns: {combined_df.columns}")
+        # Combine all DataFrames
+        if not df_list:
+            raise HTTPException(status_code=400, detail="No valid data found in any file")
+            
+        # Combine DataFrames with different columns
+        combined_df = pd.concat(df_list, ignore_index=True)
+        logger.info(f"Combined DataFrame shape: {combined_df.shape}, columns: {combined_df.columns.tolist()}")
 
         if len(files) > 1:
             prompt = f"(Combined multiple files) {prompt}"
 
-        # Analyze the prompt intent (visualization, statistical, transformation, etc.)
-        intent_analysis = await analyze_prompt_intent(prompt)
-        logger.info(f"Intent analysis result: {intent_analysis['intent']}")
-        columns = combined_df.columns
+        generation_request = GenerationRequest(prompt=prompt, columns=combined_df.columns.tolist())
+        intent_response = await analyze_prompt_intent(generation_request)
 
-        # Process according to the intent
-        if intent_analysis['intent'] == 'visualization':
-            # Generate visualization configuration
-            chart_config = await get_chart_config(prompt, columns)
-            pandas_df = combined_df.toPandas()
-            visualization = process_chart_data(pandas_df.to_dict('records'), chart_config)
+        logger.info(f"Detected intent: {intent_response.intent}")
 
-            response = {
-                "type": "visualization",
-                "visualization": visualization,
-                "config": chart_config,
-                # "hdfs_paths": hdfs_paths  
+        if intent_response.intent == IntentType.VISUALIZATION:
+            chart_config = await get_chart_config(generation_request)
+            processed_chart_data = process_chart_data(combined_df.to_dict('records'), chart_config.dict())
+            return {
+                "type": "chart",
+                "config": processed_chart_data,
+                "data": combined_df.to_dict('records')
             }
 
-            logger.info(f"Visualization response prepared")
-        elif intent_analysis['intent'] == 'statistical':
-            # Generate and execute statistical analysis code
-            statistical_code = await get_statistical_code(prompt, columns)
-
-            allowed_globals = {
-                'spark': spark,
-                'F': F,
-                'df': combined_df,
-                'np': np,
-                'stats': stats,
-                'VectorAssembler': VectorAssembler,
-                'Correlation': Correlation
+        elif intent_response.intent == IntentType.TRANSFORMATION:
+            transformation_code = await get_transformation_code(generation_request)
+            transformed_df = execute_code_safely(transformation_code, combined_df, {})
+            return {
+                "type": "table",
+                "data": transformed_df.to_dict('records'),
+                "message": "Data transformed successfully."
             }
 
-            exec(statistical_code, allowed_globals)
-            stat_df = allowed_globals.get('stat_df')
-
-            if stat_df is None:
-                raise ValueError("Statistical analysis did not produce a result")
-
-            result_df = stat_df.toPandas()
-            response = {
-                "type": "statistical",
-                "data": result_df.to_dict('records'),
-                "statistical_type": intent_analysis.get('statistical_type', None),
-                # "hdfs_paths": hdfs_paths  
-            }
-        else:
-            # Default to data transformation
-            transformation_code = await get_transformation_code(prompt, columns)
-            transformed_df = execute_transformation(transformation_code, combined_df)
+        elif intent_response.intent == IntentType.STATISTICAL:
+            statistical_code = await get_statistical_code(generation_request)
+            stat_result = execute_code_safely(statistical_code, combined_df, {})
             
-            # Store the transformed data in HDFS
-            transformed_hdfs_path = f"/tmp/transformed_{datetime.now().strftime('%Y%m%d_%H%M%S%f')}"
-            transformed_spark_df = spark.createDataFrame(transformed_df)
-            transformed_spark_df.write.parquet(transformed_hdfs_path, mode="overwrite")
-            logger.info(f"Transformed data stored in HDFS at: {transformed_hdfs_path}")
+            # Convert result to a JSON-serializable format
+            if isinstance(stat_result, pd.DataFrame):
+                result_data = stat_result.to_dict('records')
+            elif isinstance(stat_result, dict):
+                result_data = {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in stat_result.items()}
+            elif isinstance(stat_result, (np.ndarray, list)):
+                result_data = stat_result.tolist()
+            else:
+                result_data = str(stat_result)
+                
+            return {
+                "type": "statistical_result",
+                "result": result_data,
+                "message": "Statistical analysis completed."
+            }
+
+        else:
+            raise HTTPException(status_code=400, detail="Could not determine the intent of the prompt.")
             
             response = {
                 "type": "transformation",
-                "data": transformed_df.to_dict('records'),
+                "data": transformed_df.head(100).to_dict('records'),  # Send first 100 rows
                 "columns": transformed_df.columns.tolist(),
                 "rows": len(transformed_df),
-                # "hdfs_paths": hdfs_paths,  
-                "transformed_hdfs_path": transformed_hdfs_path  # Path to transformed data
+                "saved_path": transformed_path
             }
 
         return response
@@ -314,14 +261,8 @@ async def process_data(files: List[UploadFile] = File(...), prompt: str = Form(.
         logger.error(f"Error during processing: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Remove all Hadoop files
-        for hadoop_path in hadoop_paths:
-            try:
-                fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
-                fs.delete(spark._jvm.org.apache.hadoop.fs.Path(hadoop_path), True) #recursive delete
-                logger.info(f"Hadoop file removed: {hadoop_path}")
-            except Exception as delete_error:
-                logger.error(f"Error deleting Hadoop file {hadoop_path}: {delete_error}")
+        # Cleanup any temporary files if needed
+        pass
 
 @router.post("/generate-dashboard")
 async def generate_dashboard(prompt: str, columns: List[str], data: List[Dict[str, Any]]):

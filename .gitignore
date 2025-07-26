@@ -45,6 +45,9 @@ Thumbs.db
 logs/
 log/
 
+Backend/uploads/
+Backend/Dashboard_Viewer/dashboards/
+
 # Credentials
 *serviceAccountKey.json
 *credentials.json

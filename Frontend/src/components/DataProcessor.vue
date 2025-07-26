@@ -1,36 +1,5 @@
 <template>
 	<div class="flex flex-col relative h-screen">
-		<!-- Modal Container (relative to this page only) -->
-		<div class="absolute inset-0 z-50 flex items-center justify-center">
-			
-			<!-- Only blur the content behind modal (not the full screen) -->
-			<div
-			class="absolute inset-0 bg-black/30 backdrop-blur-md rounded-xl"
-			@click="close"
-			></div>
-
-			<!-- Modal Box -->
-			<div
-			class="relative z-10 bg-base-100 max-w-lg w-full p-6 rounded-2xl shadow-lg text-center"
-			>
-			<h2 class="text-2xl font-bold text-primary mb-4">
-				🚀 Important Alert
-			</h2>
-			<p class="text-base-content text-md leading-relaxed">
-				This page showcases one of our most groundbreaking features — we use
-				<span class="font-semibold text-purple-600">Large Language Models (LLMs)</span>
-				locally to analyze your data to ensure Privacy and Security.
-				<br /><br />
-				Along with LLMs, we're leveraging
-				<span class="font-semibold text-indigo-600">Apache Spark</span> and
-				<span class="font-semibold text-indigo-600">Hadoop</span> for scalable processing.
-				<br /><br />
-			Honestly, deploying this is a huge challenge — I'm just a student and can't afford pricey servers — but I promise this works <span class="font-semibold text-green-600">100%</span>. 🔥
-			<br /><br />
-				Can’t wait to share this in the next round. So until then... <span class="italic">Check out the Dashboard Builder... If anything goes wrong please refresh the page</span>
-			</p>
-			</div>
-		</div>
 		<!-- Page Content -->
 		<main class="flex-1 overflow-y-auto">
 			<div class="container mx-auto px-4 py-8">
@@ -205,25 +174,14 @@
 									</h2>
 									<p class="opacity-80">Insights from your data</p>
 								</div>
-								
-								<!-- Visualization Result -->
-								<div v-if="processedData.type === 'visualization'" class="p-6">
+								<!-- Chart Result -->
+								<div v-if="processedData.type === 'chart'" class="p-6">
 									<div class="bg-base-200/50 rounded-xl p-6 mb-6">
-										<h3 class="text-lg font-medium mb-4 text-base-content">{{ processedData.title || 'Visualization' }}</h3>
+										<h3 class="text-lg font-medium mb-4 text-base-content">{{ processedData.config?.options?.plugins?.title?.text || 'Visualization' }}</h3>
 										<div class="chart-container aspect-[4/3] max-h-[500px]">
 											<canvas ref="chartCanvas"></canvas>
 										</div>
 									</div>
-									
-									<div v-if="processedData.insights && processedData.insights.length > 0" class="mb-6">
-										<h3 class="text-lg font-medium mb-2 text-base-content">Key Insights</h3>
-										<ul class="list-disc list-inside space-y-1 text-base-content/70">
-											<li v-for="(insight, index) in processedData.insights" :key="index">
-												{{ insight }}
-											</li>
-										</ul>
-									</div>
-									
 									<div class="flex justify-end gap-3">
 										<button @click="saveToCollection" class="btn btn-outline">
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1">
@@ -239,61 +197,15 @@
 										</button>
 									</div>
 								</div>
-								
-								<!-- Statistical Result -->
-								<div v-else-if="processedData.type === 'statistical'" class="p-6">
+								<!-- Table Result -->
+								<div v-else-if="processedData.type === 'table'" class="p-6">
 									<div class="bg-base-200/50 rounded-xl p-6 mb-6">
-										<h3 class="text-lg font-medium mb-4 text-base-content">{{ processedData.title || 'Statistical Analysis' }}</h3>
+										<h3 class="text-lg font-medium mb-4 text-base-content">Transformed Data</h3>
 										<div class="overflow-x-auto">
 											<table class="table w-full">
 												<thead>
 													<tr>
-														<th v-for="column in Object.keys(processedData.data[0] || {})" :key="column" 
-															class="bg-base-200 text-xs font-medium uppercase">
-															{{ column }}
-														</th>
-													</tr>
-												</thead>
-												<tbody>
-													<tr v-for="(row, rowIndex) in processedData.data" :key="rowIndex">
-														<td v-for="(value, column) in row" :key="column" 
-															class="text-sm whitespace-nowrap">
-															{{ value }}
-														</td>
-													</tr>
-												</tbody>
-											</table>
-										</div>
-									</div>
-									
-									<div v-if="processedData.insights && processedData.insights.length > 0" class="mb-6">
-										<h3 class="text-lg font-medium mb-2 text-base-content">Key Insights</h3>
-										<ul class="list-disc list-inside space-y-1 text-base-content/70">
-											<li v-for="(insight, index) in processedData.insights" :key="index">
-												{{ insight }}
-											</li>
-										</ul>
-									</div>
-									
-									<div class="flex justify-end">
-										<button @click="downloadStatisticalData" class="btn btn-primary">
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-											</svg>
-											Download CSV
-										</button>
-									</div>
-								</div>
-
-								<!-- Transformed Result -->
-								<div v-else-if="processedData.type === 'transformation'" class="p-6">
-									<div class="bg-base-200/50 rounded-xl p-6 mb-6">
-										<h3 class="text-lg font-medium mb-4 text-base-content">{{ processedData.title || 'Transformed Data' }}</h3>
-										<div class="overflow-x-auto">
-											<table class="table w-full">
-												<thead>
-													<tr>
-														<th v-for="column in processedData.columns" :key="column" class="bg-base-200 text-xs font-medium uppercase">
+														<th v-for="column in Object.keys(processedData.data[0] || {})" :key="column" class="bg-base-200 text-xs font-medium uppercase">
 															{{ column }}
 														</th>
 													</tr>
@@ -310,6 +222,44 @@
 									</div>
 									<div class="flex justify-end">
 										<button @click="downloadData" class="btn btn-primary">
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+											</svg>
+											Download CSV
+										</button>
+									</div>
+								</div>
+								<!-- Statistical Result -->
+								<div v-else-if="processedData.type === 'statistical_result'" class="p-6">
+									<div class="bg-base-200/50 rounded-xl p-6 mb-6">
+										<h3 class="text-lg font-medium mb-4 text-base-content">Statistical Analysis</h3>
+										<div v-if="Array.isArray(processedData.result) && processedData.result.length && typeof processedData.result[0] === 'object'">
+											<table class="table w-full">
+												<thead>
+													<tr>
+														<th v-for="column in Object.keys(processedData.result[0] || {})" :key="column" class="bg-base-200 text-xs font-medium uppercase">
+															{{ column }}
+														</th>
+													</tr>
+												</thead>
+												<tbody>
+													<tr v-for="(row, rowIndex) in processedData.result" :key="rowIndex">
+														<td v-for="(value, column) in row" :key="column" class="text-sm whitespace-nowrap">
+															{{ value }}
+														</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+										<div v-else-if="typeof processedData.result === 'object' && processedData.result !== null">
+											<pre class="bg-base-200 rounded p-4 text-xs overflow-x-auto">{{ JSON.stringify(processedData.result, null, 2) }}</pre>
+										</div>
+										<div v-else>
+											<p class="text-base-content">{{ processedData.result }}</p>
+										</div>
+									</div>
+									<div class="flex justify-end">
+										<button @click="downloadStatisticalData" class="btn btn-primary">
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
 											</svg>
@@ -593,8 +543,8 @@ export default {
 				processedData.value = response.data;
 				
 				// If visualization type, create chart
-				if (processedData.value.type === 'visualization') {
-					console.log('Visualization data:', processedData.value.visualization);
+				if (processedData.value.type === 'chart') {
+					console.log('Chart data:', processedData.value.config);
 					await nextTick();
 					updateChart();
 				}
@@ -657,10 +607,10 @@ export default {
 					return;
 				}
 
-				const chartData = processedData.value?.visualization;
-				console.log('Chart data before creation:', chartData);
+				const chartConfig = processedData.value?.config;
+				console.log('Chart data before creation:', chartConfig);
 				
-				if (!chartData) {
+				if (!chartConfig) {
 					console.error('No visualization data available');
 					return;
 				}
@@ -673,77 +623,7 @@ export default {
 				chartCanvas.value.style.width = '100%';
 
 				// Create chart configuration
-				const chartConfig = {
-					type: chartData.type,
-					data: {
-						labels: chartData.data.labels,
-						datasets: chartData.data.datasets.map(dataset => ({
-							...dataset,
-							backgroundColor: dataset.backgroundColor,
-							borderColor: dataset.borderColor,
-							borderWidth: 1,
-							barThickness: 50, // Add fixed bar thickness
-							maxBarThickness: 75, // Maximum bar thickness
-							minBarLength: 2 // Minimum bar length in pixels
-						}))
-					},
-					options: {
-						responsive: true,
-						maintainAspectRatio: false,
-						animation: {
-							duration: 1000
-						},
-						plugins: {
-							legend: {
-								position: 'top',
-								labels: {
-									font: {
-										size: 12
-									}
-								}
-							},
-							title: {
-								display: true,
-								text: chartData.options?.plugins?.title?.text || 'Data Visualization',
-								font: {
-									size: 16,
-									weight: 'bold'
-								}
-							}
-						},
-						scales: {
-							y: {
-								beginAtZero: true,
-								ticks: {
-									callback: (value) => formatCurrency(value),
-									font: {
-										size: 11
-									}
-								},
-								grid: {
-									display: true,
-									drawBorder: true,
-									drawOnChartArea: true
-								}
-							},
-							x: {
-								grid: {
-									display: false
-								},
-								ticks: {
-									font: {
-										size: 11
-									}
-								}
-							}
-						}
-					}
-				};
-
-				console.log('Final chart configuration:', chartConfig);
-				
-				// Create new chart instance
-				chartInstance.value = new Chart(ctx, chartConfig);
+				const chartInstance = new Chart(ctx, chartConfig);
 
 			} catch (error) {
 				console.error('Error creating chart:', error);
@@ -817,7 +697,7 @@ export default {
 		const downloadData = () => {
 			if (!processedData.value) return;
 			
-			if (processedData.value.type === 'visualization') {
+			if (processedData.value.type === 'chart') {
 				downloadChartImage();
 				return;
 			}
@@ -825,14 +705,14 @@ export default {
 			let dataToDownload;
 			let filename = 'transformed_data.csv';
 
-			if (processedData.value.type === 'statistical') {
-				// For statistical data
-				dataToDownload = processedData.value.data;
-				filename = 'statistical_analysis.csv';
-			} else {
-				// For transformed data
+			if (processedData.value.type === 'table') {
+				// For table data
 				dataToDownload = processedData.value.data;
 				filename = 'transformed_data.csv';
+			} else if (processedData.value.type === 'statistical_result') {
+				// For statistical data
+				dataToDownload = processedData.value.result;
+				filename = 'statistical_analysis.csv';
 			}
 
 			// Convert data to CSV format
@@ -860,14 +740,14 @@ export default {
 		
 		// Download statistical data as CSV (original function)
 		const downloadStatisticalData = () => {
-			if (!processedData.value || !processedData.value.data || processedData.value.data.length === 0) {
+			if (!processedData.value || !processedData.value.result || processedData.value.result.length === 0) {
 				return;
 			}
 			
-			const headers = Object.keys(processedData.value.data[0]);
+			const headers = Object.keys(processedData.value.result[0]);
 			let csvContent = headers.join(',') + '\n';
 			
-			processedData.value.data.forEach(row => {
+			processedData.value.result.forEach(row => {
 				const rowData = headers.map(header => row[header]);
 				csvContent += rowData.join(',') + '\n';
 			});
@@ -892,10 +772,10 @@ export default {
 				userPrompt.value = '';
 				
 				// Handle different data types
-				if (processedData.value.type === 'visualization') {
+				if (processedData.value.type === 'chart') {
 					// For visualization, extract the data from the chart
-					const datasets = processedData.value.visualization.data.datasets;
-					const labels = processedData.value.visualization.data.labels;
+					const datasets = processedData.value.config.data.datasets;
+					const labels = processedData.value.config.data.labels;
 					
 					console.log('Visualization data before conversion:', datasets, labels);
 					
@@ -928,11 +808,11 @@ export default {
 					
 					console.log('Updated preview data for visualization', previewData.value);
 				} 
-				else if (processedData.value.type === 'statistical') {
+				else if (processedData.value.type === 'statistical_result') {
 					// For statistical data
-					const columns = Object.keys(processedData.value.data[0] || {});
+					const columns = Object.keys(processedData.value.result[0] || {});
 					
-					console.log('Statistical data before conversion:', processedData.value.data);
+					console.log('Statistical data before conversion:', processedData.value.result);
 					console.log('Columns:', columns);
 					
 					// Create a single new file representation
@@ -941,12 +821,12 @@ export default {
 					// Update preview data - replace all existing preview data
 					previewData.value = [{
 						headers: columns,
-						displayedRows: processedData.value.data.slice(0, 5),
-						totalRows: processedData.value.data.length
+						displayedRows: processedData.value.result.slice(0, 5),
+						totalRows: processedData.value.result.length
 					}];
 					
 					headers.value = columns;
-					rows.value = processedData.value.data;
+					rows.value = processedData.value.result;
 					
 					console.log('Updated preview data for statistical', previewData.value);
 				} 
@@ -1028,9 +908,9 @@ export default {
 					console.log('Found processed data in store:', storeProcessedData);
 					
 					// Handle it based on the type
-					if (storeProcessedData.type === 'visualization') {
-						const datasets = storeProcessedData.visualization.data.datasets;
-						const labels = storeProcessedData.visualization.data.labels;
+					if (storeProcessedData.type === 'chart') {
+						const datasets = storeProcessedData.config.data.datasets;
+						const labels = storeProcessedData.config.data.labels;
 						
 						// Create a format that can be displayed in the preview table
 						const data = labels.map((label, index) => {
@@ -1057,17 +937,17 @@ export default {
 						
 						console.log('Initialized from visualization data in store');
 					} 
-					else if (storeProcessedData.type === 'statistical') {
-						const columns = Object.keys(storeProcessedData.data[0] || {});
+					else if (storeProcessedData.type === 'statistical_result') {
+						const columns = Object.keys(storeProcessedData.result[0] || {});
 						
 						previewData.value = [{
 							headers: columns,
-							displayedRows: storeProcessedData.data.slice(0, 5),
-							totalRows: storeProcessedData.data.length
+							displayedRows: storeProcessedData.result.slice(0, 5),
+							totalRows: storeProcessedData.result.length
 						}];
 						
 						headers.value = columns;
-						rows.value = storeProcessedData.data;
+						rows.value = storeProcessedData.result;
 						
 						// Create dummy File objects
 						files.value = [new File([], 'statistical_data.csv')];
@@ -1097,7 +977,7 @@ export default {
 				console.error('Error in mounted hook:', error);
 			}
 			
-			if (processedData.value?.visualization) {
+			if (processedData.value?.config) {
 				updateChart();
 			}
 		});
