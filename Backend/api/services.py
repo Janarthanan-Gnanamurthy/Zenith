@@ -45,6 +45,15 @@ def process_chart_data(data: List[Dict], config: Dict) -> Dict:
     logger.info(f"Processing chart data with config: {config}")
     df = pd.DataFrame(data)
 
+    # Validate that we have data
+    if df.empty:
+        logger.warning("Empty DataFrame provided to process_chart_data")
+        return {
+            'type': 'bar',
+            'data': {'labels': [], 'datasets': [{'label': 'No Data', 'data': []}]},
+            'options': {'plugins': {'title': {'text': 'No Data Available'}}}
+        }
+
     # Map agent config keys to expected keys
     chart_type = config.get('chart_type', 'bar')
     x_axis = config.get('x_axis', df.columns[0] if len(df.columns) > 0 else 'x')
@@ -52,27 +61,59 @@ def process_chart_data(data: List[Dict], config: Dict) -> Dict:
     aggregation = config.get('aggregation', 'none')
     title = config.get('chart_title', config.get('title', 'Chart'))  # Handle both chart_title and title
 
+    # Validate that the specified columns exist
+    if x_axis not in df.columns:
+        logger.warning(f"X-axis column '{x_axis}' not found, using first column")
+        x_axis = df.columns[0] if len(df.columns) > 0 else 'x'
+    
+    if y_axis not in df.columns:
+        logger.warning(f"Y-axis column '{y_axis}' not found, using second column")
+        y_axis = df.columns[1] if len(df.columns) > 1 else df.columns[0] if len(df.columns) > 0 else 'y'
+
     # Apply aggregation if specified
     if aggregation != 'none':
-        if aggregation == 'sum':
-            df = df.groupby(x_axis)[y_axis].sum().reset_index()
-        elif aggregation == 'average':
-            df = df.groupby(x_axis)[y_axis].mean().reset_index()
-        elif aggregation == 'count':
-            df = df.groupby(x_axis).size().reset_index(name=y_axis)
+        try:
+            if aggregation == 'sum':
+                df = df.groupby(x_axis)[y_axis].sum().reset_index()
+            elif aggregation == 'average':
+                df = df.groupby(x_axis)[y_axis].mean().reset_index()
+            elif aggregation == 'count':
+                df = df.groupby(x_axis).size().reset_index(name=y_axis)
+            elif aggregation == 'min':
+                df = df.groupby(x_axis)[y_axis].min().reset_index()
+            elif aggregation == 'max':
+                df = df.groupby(x_axis)[y_axis].max().reset_index()
+            elif aggregation == 'std':
+                df = df.groupby(x_axis)[y_axis].std().reset_index()
+        except Exception as e:
+            logger.warning(f"Aggregation failed: {str(e)}, using original data")
+            # If aggregation fails, use the original data
+            pass
 
     logger.debug(f"Aggregated data: {df}")
 
     # Convert categorical values to string (Avoid converting numeric y-axis to string)
     df[x_axis] = df[x_axis].astype(str)
 
+    # Ensure y-axis data is numeric for proper chart rendering
+    try:
+        df[y_axis] = pd.to_numeric(df[y_axis], errors='coerce')
+        # Remove rows with NaN values in y-axis
+        df = df.dropna(subset=[y_axis])
+    except Exception as e:
+        logger.warning(f"Could not convert y-axis to numeric: {str(e)}")
+
+    # Prepare data for chart
+    labels = df[x_axis].tolist()
+    data_values = df[y_axis].tolist()
+
     chart_config = {
         'type': chart_type,
         'data': {
-            'labels': df[x_axis].tolist(),
+            'labels': labels,
             'datasets': [{
                 'label': y_axis,
-                'data': df[y_axis].tolist(),
+                'data': data_values,
                 'backgroundColor': [
                     '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
                     '#FF9F40', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'
