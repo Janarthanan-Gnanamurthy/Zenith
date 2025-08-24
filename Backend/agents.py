@@ -3,10 +3,27 @@ import re
 import json
 import logging
 import httpx
-from typing import Optional, List, Union, Dict, Any
+import pandas as pd
+import numpy as np
+from typing import Optional, List, Union, Dict, Any, TypedDict
 from enum import Enum
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, validator
+
+# LangChain imports
+from langchain.schema import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain.llms.base import LLM
+from langchain.callbacks.manager import CallbackManagerForLLMRun
+from langchain.tools import Tool
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+
+# LangGraph imports
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +36,7 @@ logger = logging.getLogger(__name__)
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:4b")
 
-# Pydantic Models for Validation
+# Pydantic Models for Validation (keeping existing models)
 class IntentType(str, Enum):
     VISUALIZATION = "visualization"
     TRANSFORMATION = "transformation" 
@@ -57,44 +74,497 @@ class AggregationType(str, Enum):
     MAX = "max"
     STD = "std"
 
-class PromptIntentResponse(BaseModel):
-    intent: IntentType
-    reason: str
-    visualization_type: Optional[VisualizationType] = None
-    transformation_type: Optional[TransformationType] = None
-    statistical_type: Optional[StatisticalType] = None
-    
-    @validator('visualization_type')
-    def validate_visualization_type(cls, v, values):
-        if values.get('intent') == IntentType.VISUALIZATION and v is None:
-            raise ValueError('visualization_type is required when intent is visualization')
-        return v
-    
-    @validator('transformation_type')
-    def validate_transformation_type(cls, v, values):
-        if values.get('intent') == IntentType.TRANSFORMATION and v is None:
-            raise ValueError('transformation_type is required when intent is transformation')
-        return v
-    
-    @validator('statistical_type')
-    def validate_statistical_type(cls, v, values):
-        if values.get('intent') == IntentType.STATISTICAL and v is None:
-            raise ValueError('statistical_type is required when intent is statistical')
-        return v
+# State for LangGraph
+class AgentState(TypedDict):
+    messages: List[BaseMessage]
+    prompt: str
+    columns: List[str]
+    data_sample: str
+    intent: Optional[str]
+    intent_details: Optional[Dict[str, Any]]
+    chart_config: Optional[Dict[str, Any]]
+    generated_code: Optional[str]
+    result: Optional[Any]
+    error: Optional[str]
 
-class ChartConfig(BaseModel):
-    chart_type: VisualizationType
-    x_axis: str
-    y_axis: str
-    aggregation: AggregationType
-    title: str
+# Custom Ollama LLM for LangChain
+class OllamaLLM(LLM):
+    temperature: float = 0.5
     
-    @validator('x_axis', 'y_axis')
-    def validate_axis_columns(cls, v):
-        if not v or not v.strip():
-            raise ValueError('Axis column names cannot be empty')
-        return v.strip()
+    @property
+    def _llm_type(self) -> str:
+        return "ollama"
+    
+    def _call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Call Ollama API synchronously."""
+        import asyncio
+        return asyncio.run(self._acall(prompt, stop, run_manager, **kwargs))
+    
+    async def _acall(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Call Ollama API asynchronously."""
+        url = f"{OLLAMA_BASE_URL}/api/generate"
+        
+        payload = {
+            "model": MODEL_NAME,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "top_p": 0.95,
+            }
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                result = response.json()
+                return result.get("response", "")
+        except Exception as e:
+            logger.error(f"Error calling Ollama: {str(e)}")
+            raise
 
+class DataAnalysisAgents:
+    """Main class containing all data analysis agents using LangChain and LangGraph."""
+    
+    def __init__(self, temperature: float = 0.5):
+        self.llm = OllamaLLM(temperature=temperature)
+        self.setup_tools()
+        self.setup_agents()
+        self.setup_graph()
+    
+    def get_data_context(self, df: pd.DataFrame, num_rows: int = 5) -> str:
+        """Generate data context from the first few rows of the DataFrame."""
+        try:
+            # Get basic info about the dataset
+            data_info = {
+                "shape": df.shape,
+                "columns": df.columns.tolist(),
+                "dtypes": df.dtypes.to_dict(),
+                "sample_data": df.head(num_rows).to_dict('records'),
+                "null_counts": df.isnull().sum().to_dict(),
+                "memory_usage": df.memory_usage(deep=True).to_dict()
+            }
+            
+            # Convert to readable string format
+            context = f"""
+Dataset Overview:
+- Shape: {data_info['shape'][0]} rows × {data_info['shape'][1]} columns
+- Columns: {', '.join(data_info['columns'])}
+
+Data Types:
+{chr(10).join([f'- {col}: {dtype}' for col, dtype in data_info['dtypes'].items()])}
+
+Sample Data (first {num_rows} rows):
+{pd.DataFrame(data_info['sample_data']).to_string(index=False)}
+
+Missing Values:
+{chr(10).join([f'- {col}: {count} missing' for col, count in data_info['null_counts'].items() if count > 0])}
+"""
+            return context.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating data context: {str(e)}")
+            return f"Error generating data context: {str(e)}"
+    
+    def setup_tools(self):
+        """Setup tools for the agents."""
+        self.tools = []
+    
+    def setup_agents(self):
+        """Setup individual agents using LangChain."""
+        
+        # Intent Analysis Agent
+        self.intent_agent_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert data analyst specializing in understanding user intentions for data analysis tasks.
+
+Your job is to analyze user prompts and classify them into one of three categories:
+1. VISUALIZATION: User wants to create charts, graphs, or visual representations
+2. TRANSFORMATION: User wants to modify, filter, aggregate, or transform data
+3. STATISTICAL: User wants to perform statistical analysis, tests, or calculations
+
+Consider the data context provided to make informed decisions.
+
+Keywords for classification:
+- Visualization: plot, chart, graph, visualize, show, display, bar, line, pie, scatter
+- Transformation: group, aggregate, filter, join, merge, pivot, transform, calculate, compute
+- Statistical: correlation, test, significance, hypothesis, regression, anova, chi-square, p-value
+
+Always respond with valid JSON containing:
+- intent: one of "visualization", "transformation", or "statistical"
+- reason: brief explanation of your classification
+- specific_type: specific subtype based on the intent
+- confidence: confidence score from 0.0 to 1.0"""),
+            ("human", """Data Context:
+{data_context}
+
+User Prompt: {prompt}
+
+Analyze this prompt and provide your classification as JSON.""")
+        ])
+        
+        # Chart Configuration Agent
+        self.chart_config_agent_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a data visualization expert. Your job is to create optimal chart configurations based on user requests and data characteristics.
+
+Consider the data types, relationships, and user intent to recommend:
+- Appropriate chart type (bar, line, pie, scatter, area)
+- Correct axis mappings
+- Suitable aggregation methods
+- Descriptive titles
+
+Guidelines:
+- Categorical data: use bar or pie charts
+- Time series: use line or area charts
+- Relationships: use scatter charts
+- Multiple categories: use grouped bar charts
+- Ensure column names exist in the available data
+
+Always respond with valid JSON containing the chart configuration."""),
+            ("human", """Data Context:
+{data_context}
+
+Available Columns: {columns}
+User Prompt: {prompt}
+
+Generate an optimal chart configuration as JSON.""")
+        ])
+        
+        # Code Generation Agent
+        self.code_generation_agent_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert Python programmer specializing in pandas, numpy, and data analysis.
+
+Generate clean, efficient, and safe Python code based on user requirements. 
+
+For TRANSFORMATION tasks:
+- Use pandas operations efficiently
+- Handle missing values appropriately
+- Store result in 'transformed_df'
+- Use proper column selection with lists, not tuples
+- Include error handling
+
+For STATISTICAL tasks:
+- Use pandas, numpy, and scipy.stats
+- Handle missing values with dropna()
+- Store result in 'stat_result'
+- Include proper statistical tests and interpretations
+
+For VISUALIZATION tasks:
+- Generate code that prepares data for visualization
+- Store configuration in 'chart_config'
+
+IMPORTANT RULES:
+- Always use lists for column selection: df[['col1', 'col2']]
+- you have access to data in the variable 'df'
+- Store result in 'transformed_df'
+- Use .reset_index() after groupby operations
+- Handle edge cases and missing data
+- No function definitions, work directly with variables
+- Only use allowed libraries: pandas, numpy, scipy.stats
+
+Generate only the code, no explanations."""),
+            ("human", """Data Context:
+{data_context}
+
+User Prompt: {prompt}
+Available Columns: {columns}
+
+Generate the appropriate Python code.""")
+        ])
+    
+    def setup_graph(self):
+        """Setup LangGraph workflow."""
+        
+        # Define the workflow
+        workflow = StateGraph(AgentState)
+        
+        # Add nodes
+        workflow.add_node("analyze_intent", self.analyze_intent_node)
+        workflow.add_node("generate_chart_config", self.generate_chart_config_node)
+        workflow.add_node("generate_code", self.generate_code_node)
+        workflow.add_node("execute_code", self.execute_code_node)
+        
+        # Define edges
+        workflow.set_entry_point("analyze_intent")
+        
+        workflow.add_conditional_edges(
+            "analyze_intent",
+            self.route_after_intent,
+            {
+                "visualization": "generate_chart_config",
+                "transformation": "generate_code",
+                "statistical": "generate_code"
+            }
+        )
+        
+        workflow.add_edge("generate_chart_config", "generate_code")
+        workflow.add_edge("generate_code", "execute_code")
+        workflow.add_edge("execute_code", END)
+        
+        # Compile the graph
+        self.app = workflow.compile(checkpointer=MemorySaver())
+    
+    async def analyze_intent_node(self, state: AgentState) -> AgentState:
+        """Node to analyze user intent."""
+        try:
+            prompt = self.intent_agent_prompt.format(
+                data_context=state["data_sample"],
+                prompt=state["prompt"]
+            )
+            
+            response = await self.llm._acall(prompt)
+            intent_data = self.extract_json_from_response(response)
+            
+            state["intent"] = intent_data.get("intent")
+            state["intent_details"] = intent_data
+            
+            logger.info(f"Intent analyzed: {intent_data}")
+            
+        except Exception as e:
+            logger.error(f"Error in analyze_intent_node: {str(e)}")
+            state["error"] = str(e)
+        
+        return state
+    
+    async def generate_chart_config_node(self, state: AgentState) -> AgentState:
+        """Node to generate chart configuration."""
+        try:
+            prompt = self.chart_config_agent_prompt.format(
+                data_context=state["data_sample"],
+                columns=", ".join(state["columns"]),
+                prompt=state["prompt"]
+            )
+            
+            response = await self.llm._acall(prompt)
+            chart_config = self.extract_json_from_response(response)
+            
+            state["chart_config"] = chart_config
+            
+            logger.info(f"Chart config generated: {chart_config}")
+            
+        except Exception as e:
+            logger.error(f"Error in generate_chart_config_node: {str(e)}")
+            state["error"] = str(e)
+        
+        return state
+    
+    async def generate_code_node(self, state: AgentState) -> AgentState:
+        """Node to generate Python code."""
+        try:
+            prompt = self.code_generation_agent_prompt.format(
+                data_context=state["data_sample"],
+                intent=state["intent"],
+                prompt=state["prompt"],
+                columns=", ".join(state["columns"])
+            )
+            
+            response = await self.llm._acall(prompt)
+            
+            # Extract code from response
+            code_match = re.search(r"```python\n(.*?)\n```", response, re.DOTALL)
+            code = code_match.group(1) if code_match else response
+            code = code.strip()
+            
+            # Ensure proper result variable based on intent
+            if state["intent"] == "transformation":
+                if "transformed_df" not in code:
+                    code += "\n# Ensure transformed_df exists\ntransformed_df = df.copy()"
+                # Add error handling
+#                 code = f"""try:
+# {chr(10).join('    ' + line for line in code.split(chr(10)))}
+# except Exception as e:
+#     print(f"Error in transformation: {{e}}")
+#     transformed_df = df.copy()
+# """
+            elif state["intent"] == "statistical":
+                if "stat_result" not in code:
+                    code += "\n# Ensure stat_result exists\nstat_result = df.describe()"
+                # Add error handling
+#                 code = f"""try:
+# {chr(10).join('    ' + line for line in code.split(chr(10)))}
+# except Exception as e:
+#     print(f"Error in statistical analysis: {{e}}")
+#     stat_result = df.describe()
+# """
+            
+            state["generated_code"] = code
+            
+            logger.info(f"Code generated for {state['intent']}: {code[:200]}...")
+            
+        except Exception as e:
+            logger.error(f"Error in generate_code_node: {str(e)}")
+            state["error"] = str(e)
+        
+        return state
+    
+    async def execute_code_node(self, state: AgentState) -> AgentState:
+        """Node to safely execute generated code."""
+        try:
+            if not state.get("generated_code"):
+                state["error"] = "No code to execute"
+                return state
+            
+            # Create a safe execution environment
+            import pandas as pd
+            import numpy as np
+            from scipy import stats
+            
+            # Get the DataFrame from state
+            df = self.current_df
+            if df is None:
+                state["error"] = "No DataFrame available for execution"
+                return state
+            
+            # Execute the generated code in a safe environment
+            local_vars = {
+                'pd': pd,
+                'np': np,
+                'stats': stats,
+                'df': df.copy()  # Use a copy to avoid modifying original
+            }
+            
+            # Execute the code
+            exec(state["generated_code"], {}, local_vars)
+            
+            # Extract the result based on intent
+            if state["intent"] == "transformation":
+                if "transformed_df" in local_vars:
+                    transformed_df = local_vars["transformed_df"]
+                    # Ensure it's a DataFrame
+                    if isinstance(transformed_df, pd.DataFrame):
+                        # Convert DataFrame to dict for serialization
+                        state["result"] = transformed_df.to_dict('records')
+                    else:
+                        # If it's not a DataFrame, try to convert it
+                        try:
+                            df_result = pd.DataFrame(transformed_df)
+                            state["result"] = df_result.to_dict('records')
+                        except:
+                            state["error"] = "Transformation result is not a valid DataFrame"
+                else:
+                    # Fallback: create a simple transformation
+                    logger.warning("Transformation code did not create 'transformed_df', using fallback")
+                    try:
+                        # Create a simple transformation as fallback
+                        fallback_code = "transformed_df = df.copy()"
+                        exec(fallback_code, {}, local_vars)
+                        fallback_df = local_vars["transformed_df"]
+                        state["result"] = fallback_df.to_dict('records')
+                    except Exception as fallback_error:
+                        state["error"] = f"Transformation failed and fallback also failed: {str(fallback_error)}"
+                        
+            elif state["intent"] == "statistical":
+                if "stat_result" in local_vars:
+                    stat_result = local_vars["stat_result"]
+                    # Handle different types of statistical results
+                    if isinstance(stat_result, pd.DataFrame):
+                        state["result"] = stat_result.to_dict('records')
+                    elif isinstance(stat_result, dict):
+                        state["result"] = stat_result
+                    else:
+                        state["result"] = str(stat_result)
+                else:
+                    # Fallback: create basic statistics
+                    logger.warning("Statistical code did not create 'stat_result', using fallback")
+                    try:
+                        fallback_code = "stat_result = df.describe()"
+                        exec(fallback_code, {}, local_vars)
+                        fallback_result = local_vars["stat_result"]
+                        if isinstance(fallback_result, pd.DataFrame):
+                            state["result"] = fallback_result.to_dict('records')
+                        else:
+                            state["result"] = str(fallback_result)
+                    except Exception as fallback_error:
+                        state["error"] = f"Statistical analysis failed and fallback also failed: {str(fallback_error)}"
+            else:
+                # For visualization, store the chart config
+                state["result"] = {
+                    "intent": state["intent"],
+                    "chart_config": state.get("chart_config")
+                }
+            
+            logger.info(f"Code execution completed for {state['intent']}")
+            
+        except Exception as e:
+            logger.error(f"Error in execute_code_node: {str(e)}")
+            state["error"] = f"Code execution failed: {str(e)}"
+        
+        return state
+    
+    def route_after_intent(self, state: AgentState) -> str:
+        """Route to appropriate node based on intent."""
+        intent = state.get("intent", "transformation")
+        return intent
+    
+    def extract_json_from_response(self, response_text: str) -> Dict[str, Any]:
+        """Extract and parse JSON from LLM response."""
+        # Try to extract JSON from markdown code blocks
+        json_match = re.search(r"```(?:json)?\n(.*?)\n```", response_text, re.DOTALL)
+        if json_match:
+            response_text = json_match.group(1)
+        
+        # Clean any potential leading/trailing whitespace
+        response_text = response_text.strip()
+        
+        try:
+            return json.loads(response_text)
+        except json.JSONDecodeError:
+            # If direct parsing fails, try to extract just the JSON object
+            json_obj_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
+            if json_obj_match:
+                return json.loads(json_obj_match.group(1))
+            raise ValueError(f"Could not parse JSON from response: {response_text}")
+    
+    async def process_request(self, prompt: str, df: pd.DataFrame, columns: List[str]) -> Dict[str, Any]:
+        """Process a data analysis request through the agent workflow."""
+        
+        # Generate data context
+        data_sample = self.get_data_context(df)
+        
+        # Store DataFrame in the agent instance for use in execution
+        self.current_df = df
+        
+        # Initial state
+        initial_state = {
+            "messages": [HumanMessage(content=prompt)],
+            "prompt": prompt,
+            "columns": columns,
+            "data_sample": data_sample,
+            "intent": None,
+            "intent_details": None,
+            "chart_config": None,
+            "generated_code": None,
+            "result": None,
+            "error": None
+        }
+        
+        # Run the workflow
+        config = {"configurable": {"thread_id": "test"}}
+        final_state = await self.app.ainvoke(initial_state, config=config)
+        
+        return {
+            "intent": final_state.get("intent"),
+            "intent_details": final_state.get("intent_details"),
+            "chart_config": final_state.get("chart_config"),
+            "generated_code": final_state.get("generated_code"),
+            "result": final_state.get("result"),
+            "error": final_state.get("error"),
+            "data_context": data_sample
+        }
+
+# Main API functions using the new agent system
 class GenerationRequest(BaseModel):
     prompt: str
     columns: List[str]
@@ -112,374 +582,52 @@ class GenerationRequest(BaseModel):
             raise ValueError('At least one column must be provided')
         return [col.strip() for col in v if col.strip()]
 
-async def generate_with_ollama(prompt: str, temperature: float = 0.5) -> str:
-    """Generate response using Ollama with the specified model."""
-    url = f"{OLLAMA_BASE_URL}/api/generate"
-    
-    payload = {
-        "model": MODEL_NAME,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": temperature,
-            "top_p": 0.95,
-        }
-    }
-    
+# Global agent instance
+data_agents = None
+
+def get_data_agents(temperature: float = 0.5) -> DataAnalysisAgents:
+    """Get or create the data analysis agents instance."""
+    global data_agents
+    if data_agents is None:
+        data_agents = DataAnalysisAgents(temperature=temperature)
+    return data_agents
+
+async def analyze_with_agents(request: GenerationRequest, df: pd.DataFrame) -> Dict[str, Any]:
+    """Main function to analyze data using the agent workflow."""
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
-            result = response.json()
-            return result.get("response", "")
-    except httpx.TimeoutException:
-        logger.error("Timeout when connecting to Ollama")
-        raise HTTPException(status_code=504, detail="Timeout when connecting to Ollama service")
-    except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP error from Ollama: {e.response.status_code}")
-        raise HTTPException(status_code=502, detail=f"Ollama service error: {e.response.status_code}")
-    except Exception as e:
-        logger.error(f"Error generating response with Ollama: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating response with Ollama: {str(e)}")
-
-def extract_json_from_response(response_text: str) -> Dict[str, Any]:
-    """Extract and parse JSON from Ollama response."""
-    # Try to extract JSON from markdown code blocks
-    json_match = re.search(r"```(?:json)?\n(.*?)\n```", response_text, re.DOTALL)
-    if json_match:
-        response_text = json_match.group(1)
-    
-    # Clean any potential leading/trailing whitespace
-    response_text = response_text.strip()
-    
-    try:
-        return json.loads(response_text)
-    except json.JSONDecodeError:
-        # If direct parsing fails, try to extract just the JSON object
-        json_obj_match = re.search(r"(\{.*\})", response_text, re.DOTALL)
-        if json_obj_match:
-            return json.loads(json_obj_match.group(1))
-        raise ValueError(f"Could not parse JSON from response: {response_text}")
-
-async def analyze_prompt_intent(request: GenerationRequest) -> PromptIntentResponse:
-    """Determine whether the prompt is requesting data transformation, visualization, or statistical analysis."""
-    response_format = {
-        "intent": "statistical",
-        "reason": "Prompt requests statistical analysis",
-        "visualization_type": None,
-        "transformation_type": None,
-        "statistical_type": "correlation"
-    }
-
-    input_text = f"""Analyze the following prompt and determine if it's requesting data transformation, visualization, or statistical analysis:
-
-Prompt: {request.prompt}
-Available columns: {', '.join(request.columns)}
-
-Provide a JSON response with:
-1. intent: Either 'visualization', 'transformation', or 'statistical'
-2. reason: Brief explanation of why this classification was chosen
-3. visualization_type: If intent is 'visualization', specify the chart type ('bar', 'line', 'pie', 'scatter', 'area')
-4. transformation_type: If intent is 'transformation', specify the operation type ('aggregate', 'filter', 'join', 'compute', 'group', 'pivot')
-5. statistical_type: If intent is 'statistical', specify the test type ('correlation', 'ttest', 'ztest', 'chi_square', 'anova', 'regression')
-
-Keywords for classification:
-- Visualization: plot, chart, graph, visualize, show, display, bar, line, pie, scatter
-- Transformation: group, aggregate, filter, join, merge, pivot, transform, calculate, compute
-- Statistical: correlation, test, significance, hypothesis, regression, anova, chi-square, p-value
-
-Example response format:
-{json.dumps(response_format)}
-
-Provide only the JSON response, no explanations."""
-
-    try:
-        response_text = await generate_with_ollama(input_text, temperature=request.temperature)
-        json_data = extract_json_from_response(response_text)
-        
-        # Validate and return structured response
-        return PromptIntentResponse(**json_data)
+        agents = get_data_agents(request.temperature)
+        result = await agents.process_request(request.prompt, df, request.columns)
+        return result
         
     except Exception as e:
-        logger.error(f"Error analyzing prompt intent: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error analyzing prompt intent: {str(e)}")
-
-async def get_chart_config(request: GenerationRequest) -> ChartConfig:
-    """Generate chart configuration based on natural language prompt."""
-    response_format = {
-        "chart_type": "bar",
-        "x_axis": "date",
-        "y_axis": "sales", 
-        "aggregation": "sum",
-        "title": "Total Sales by Date"
-    }
-    
-    input_text = f"""Based on the following prompt, determine the appropriate chart configuration:
-
-Prompt: {request.prompt}
-Available columns: {', '.join(request.columns)}
-
-Generate a JSON configuration with:
-1. chart_type: 'bar', 'line', 'pie', 'scatter', or 'area'
-2. x_axis: column name for x-axis (must be from available columns)
-3. y_axis: column name for y-axis (must be from available columns)
-4. aggregation: 'sum', 'average', 'count', 'min', 'max', 'std', or 'none'
-5. title: descriptive chart title
-
-Guidelines:
-- For categorical data: use 'bar' or 'pie' charts
-- For time series: use 'line' or 'area' charts
-- For relationships: use 'scatter' charts
-- Choose appropriate aggregation based on data type
-- Ensure column names exist in the available columns list
-
-Example response format:
-{json.dumps(response_format)}
-
-Provide only the JSON configuration, no explanations."""
-
-    try:
-        response_text = await generate_with_ollama(input_text, temperature=request.temperature)
-        json_data = extract_json_from_response(response_text)
-        
-        # Validate column names exist in available columns
-        config = ChartConfig(**json_data)
-        if config.x_axis not in request.columns:
-            raise ValueError(f"X-axis column '{config.x_axis}' not found in available columns")
-        if config.y_axis not in request.columns:
-            raise ValueError(f"Y-axis column '{config.y_axis}' not found in available columns")
-            
-        return config
-        
-    except Exception as e:
-        logger.error(f"Error generating chart configuration: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating chart configuration: {str(e)}")
-
-async def get_transformation_code(request: GenerationRequest) -> str:
-    """Generate pandas transformation code based on prompt."""
-    input_text = f"""Write Python code to perform the following pandas DataFrame transformation:
-
-Prompt: {request.prompt}
-Available columns: {', '.join(request.columns)}
-
-# Pandas Knowledge Base:
-# 1. DataFrame Operations:
-#    - df[['col1', 'col2']]: Select columns (USE LIST, NOT TUPLE!)
-#    - df.query() or df[df.column > value]: Filter rows
-#    - df.groupby('col').agg({{'col2': 'sum', 'col3': 'mean'}}): Group and aggregate
-#    - df.sort_values('col'): Sort data
-#    - df.rename(columns={{'old': 'new'}}): Rename columns
-#    - df.assign(new_col=lambda x: x.col1 + x.col2): Add/modify columns
-#    - df.drop(columns=['col']): Remove columns
-#    - df.drop_duplicates(): Remove duplicates
-#    - pd.concat([df1, df2]): Combine DataFrames
-#    - pd.merge(df1, df2, on='key'): Join/merge DataFrames
-
-# 2. Aggregation Examples:
-#    - df.groupby('category')['sales'].sum(): Single column aggregation
-#    - df.groupby('category').agg({{'sales': 'sum', 'quantity': 'mean'}}): Multiple aggregations
-#    - df.groupby(['cat1', 'cat2'])['value'].sum().reset_index(): Multiple grouping columns
-
-# 3. IMPORTANT SYNTAX RULES:
-#    - Always use LISTS for column selection: df[['col1', 'col2']] NOT df[('col1', 'col2')]
-#    - Use .reset_index() after groupby operations to flatten the result
-#    - Handle missing values with df.fillna() or df.dropna()
-#    - Use proper column references: df['column_name'] or df.column_name
-
-Requirements:
-1. Use pandas (pd) and numpy (np) for all operations
-2. Handle missing values appropriately
-3. Store result in 'transformed_df'
-4. DO NOT define functions or classes
-5. Return a pandas DataFrame
-6. Use proper type conversions if needed
-7. Handle potential errors gracefully
-8. ALWAYS use lists for column selection, never tuples
-9. Use .reset_index() after groupby operations
-10. No imports
-
-Allowed globals:
-- pd: pandas library
-- np: numpy library  
-- df: input DataFrame (work with df.copy() to avoid modifying original)
-
-Example of CORRECT code:
-# Calculate total sales by category (CORRECT - using list)
-transformed_df = (df.copy()
-                   .query('sales > 0')
-                   .groupby('category')
-                   .agg({{'sales': 'sum', 'quantity': 'mean'}})
-                   .reset_index())
-
-Example of INCORRECT code:
-# This will cause error - using tuple instead of list
-transformed_df = df.groupby('category')['sales', 'quantity'].sum()  # WRONG!
-
-Provide only the code, no explanations. Work directly with 'df' as the input DataFrame."""
-
-    try:
-        response_text = await generate_with_ollama(input_text, temperature=request.temperature)
-        
-        # Extract code from markdown blocks
-        code_match = re.search(r"```python\n(.*?)\n```", response_text, re.DOTALL)
-        code = code_match.group(1) if code_match else response_text
-        
-        # Clean the code
-        code = code.strip()
-        
-        # Validate that the code assigns to transformed_df
-        if 'transformed_df' not in code:
-            code += '\ntransformed_df = df.copy()'
-            
-        logger.info(f"Generated transformation code: {code}")
-        return code
-        
-    except Exception as e:
-        logger.error(f"Error generating transformation code: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating transformation code: {str(e)}")
-
-async def get_statistical_code(request: GenerationRequest) -> str:
-    """Generate pandas/scipy code for statistical analysis based on prompt."""
-    input_text = f"""Write Python code to perform the following statistical analysis using pandas and scipy:
-
-Prompt: {request.prompt}
-Available columns: {', '.join(request.columns)}
-
-Statistical Analysis Guide:
-1. Descriptive Statistics:
-   - df.describe(): Basic stats (count, mean, std, min, 25%, 50%, 75%, max)
-   - df[['col1', 'col2']].mean(), .median(), .std()
-   - df.skew(), df.kurtosis()
-   - df.quantile([0.25, 0.5, 0.75]): Percentiles
-
-2. Correlation & Covariance:
-   - df[['col1', 'col2']].corr(): Correlation matrix
-   - df['col1'].corr(df['col2']): Single correlation
-   - scipy.stats.pearsonr(df['col1'], df['col2'])
-   - scipy.stats.spearmanr(df['col1'], df['col2'])
-
-3. Statistical Tests:
-   - scipy.stats.ttest_1samp(df['col'], expected_mean)
-   - scipy.stats.ttest_ind(group1, group2)
-   - scipy.stats.f_oneway(group1, group2, group3): One-way ANOVA
-   - scipy.stats.chi2_contingency(pd.crosstab(df['col1'], df['col2']))
-   - scipy.stats.shapiro(df['col']): Normality test
-
-4. Regression Analysis:
-   - scipy.stats.linregress(df['x'], df['y'])
-   - np.polyfit(df['x'], df['y'], degree=1)
-
-Requirements:
-1. Use pandas (pd), numpy (np), and scipy.stats for operations
-2. Handle missing values with dropna() before statistical tests
-3. Store result in 'stat_result' (can be DataFrame, dict, or statistical result)
-4. DO NOT define functions
-5. Include proper error handling for missing data
-6. Use lists for column selection, never tuples
-
-Allowed globals:
-- pd: pandas library
-- np: numpy library
-- df: input DataFrame
-- stats: scipy.stats module
-
-Example formats:
-
-For correlation analysis:
-# Calculate correlation matrix
-numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-correlation_matrix = df[numeric_cols].corr()
-stat_result = correlation_matrix
-
-For t-test:
-# Perform t-test between two groups
-group1 = df[df['category'] == 'A']['value'].dropna()
-group2 = df[df['category'] == 'B']['value'].dropna()
-t_stat, p_value = stats.ttest_ind(group1, group2)
-stat_result = {{'t_statistic': t_stat, 'p_value': p_value}}
-
-For descriptive statistics:
-# Generate descriptive statistics
-numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-stat_result = df[numeric_cols].describe()
-
-Provide only the code, no explanations. Work directly with 'df' as the input DataFrame."""
-
-    try:
-        response_text = await generate_with_ollama(input_text, temperature=request.temperature)
-        
-        # Extract code from markdown blocks
-        code_match = re.search(r"```python\n(.*?)\n```", response_text, re.DOTALL)
-        code = code_match.group(1) if code_match else response_text
-        
-        # Clean the code
-        code = code.strip()
-        
-        # Validate that the code assigns to stat_result
-        if 'stat_result' not in code:
-            code += '\nstat_result = df.describe()'
-            
-        logger.info(f"Generated statistical code: {code}")
-        return code
-        
-    except Exception as e:
-        logger.error(f"Error generating statistical code: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating statistical code: {str(e)}")
-
-# Utility function for safe code execution
-def execute_code_safely(code: str, df, allowed_modules: Dict[str, Any]) -> Any:
-    """Safely execute generated code with restricted globals."""
-    import pandas as pd
-    import numpy as np
-    from scipy import stats
-    
-    # Create safe execution environment
-    safe_globals = {
-        '__builtins__': {},
-        'pd': pd,
-        'np': np,
-        'stats': stats,
-        'df': df.copy(),  # Work with copy to avoid modifying original
-        **allowed_modules
-    }
-    
-    local_vars = {}
-    
-    try:
-        exec(code, safe_globals, local_vars)
-        
-        # Return the appropriate result based on what was generated
-        if 'transformed_df' in local_vars:
-            return local_vars['transformed_df']
-        elif 'stat_result' in local_vars:
-            return local_vars['stat_result']
-        else:
-            raise ValueError("Generated code did not produce expected result variable")
-            
-    except Exception as e:
-        logger.error(f"Error executing generated code: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error executing generated code: {str(e)}")
+        logger.error(f"Error in agent analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in agent analysis: {str(e)}")
 
 # Test function
-async def test_analyze_prompt_intent():
-    """Test function for prompt intent analysis."""
+async def test_agent_workflow():
+    """Test function for the agent workflow."""
+    # Create sample data
+    sample_data = pd.DataFrame({
+        "item": ["Apple", "Banana", "Orange", "Apple", "Banana"],
+        "quantity": [10, 20, 15, 25, 30],
+        "unit_price_inr": [100, 50, 80, 100, 50],
+        "total_price_inr": [1000, 1000, 1200, 2500, 1500],
+        "revenue": [900, 950, 1100, 2300, 1400]
+    })
+    
     test_request = GenerationRequest(
         prompt="plot a bar chart for the revenue per item",
-        columns=["item", "quantity", "unit_price_inr", "total_price_inr", "revenue"]
+        columns=list(sample_data.columns)
     )
     
     try:
-        result = await analyze_prompt_intent(test_request)
-        print("Test analyze_prompt_intent result:", result.dict())
+        result = await analyze_with_agents(test_request, sample_data)
+        print("Agent workflow result:", json.dumps(result, indent=2, default=str))
         
-        if result.intent == IntentType.VISUALIZATION:
-            chart_config = await get_chart_config(test_request)
-            print("Chart configuration:", chart_config.dict())
-            
     except Exception as e:
         print(f"Test failed: {str(e)}")
 
 # Run the test
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(test_analyze_prompt_intent())
+    asyncio.run(test_agent_workflow())

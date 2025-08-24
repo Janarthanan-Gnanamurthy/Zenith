@@ -201,7 +201,7 @@
 								<div v-else-if="processedData.type === 'table'" class="p-6">
 									<div class="bg-base-200/50 rounded-xl p-6 mb-6">
 										<h3 class="text-lg font-medium mb-4 text-base-content">Transformed Data</h3>
-										<div class="overflow-x-auto">
+										<div v-if="processedData.data && processedData.data.length > 0" class="overflow-x-auto">
 											<table class="table w-full">
 												<thead>
 													<tr>
@@ -218,10 +218,17 @@
 													</tr>
 												</tbody>
 											</table>
+											<div v-if="processedData.data.length > 20" class="mt-3 text-center text-sm text-gray-600">
+												Showing first 20 rows of {{ processedData.data.length }} total rows
+											</div>
+										</div>
+										<div v-else class="text-center py-8 text-gray-500">
+											<p>No data available to display</p>
+											<p class="text-sm mt-2">{{ processedData.message || 'Transformation completed but no data was returned.' }}</p>
 										</div>
 									</div>
 									<div class="flex justify-end">
-										<button @click="downloadData" class="btn btn-primary">
+										<button @click="downloadData" class="btn btn-primary" :disabled="!processedData.data || processedData.data.length === 0">
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
 											</svg>
@@ -706,36 +713,91 @@ export default {
 			let filename = 'transformed_data.csv';
 
 			if (processedData.value.type === 'table') {
-				// For table data
+				// For table data - ensure we have valid data
+				if (!processedData.value.data || !Array.isArray(processedData.value.data) || processedData.value.data.length === 0) {
+					console.error('No valid data to download');
+					alert('No data available to download');
+					return;
+				}
 				dataToDownload = processedData.value.data;
 				filename = 'transformed_data.csv';
 			} else if (processedData.value.type === 'statistical_result') {
-				// For statistical data
-				dataToDownload = processedData.value.result;
+				// For statistical data - ensure we have valid data
+				if (!processedData.value.result) {
+					console.error('No statistical result to download');
+					alert('No statistical data available to download');
+					return;
+				}
+				
+				// Handle different result formats
+				if (Array.isArray(processedData.value.result)) {
+					dataToDownload = processedData.value.result;
+				} else if (typeof processedData.value.result === 'object') {
+					// Convert object to array format
+					dataToDownload = [processedData.value.result];
+				} else {
+					console.error('Unexpected statistical result format');
+					alert('Statistical data format not supported for download');
+					return;
+				}
 				filename = 'statistical_analysis.csv';
+			} else {
+				console.error('Unknown data type for download');
+				alert('Unknown data type for download');
+				return;
 			}
 
-			// Convert data to CSV format
-			const headers = Object.keys(dataToDownload[0]);
-			const csvContent = [
-				headers.join(','),
-				...dataToDownload.map(row => 
-					headers.map(header => 
-						JSON.stringify(row[header])
-					).join(',')
-				)
-			].join('\n');
+			try {
+				// Ensure we have at least one row with data
+				if (!dataToDownload || dataToDownload.length === 0) {
+					console.error('No data rows to download');
+					alert('No data available to download');
+					return;
+				}
 
-			// Create and trigger download
-			const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-			const link = document.createElement('a');
-			const url = URL.createObjectURL(blob);
-			link.setAttribute('href', url);
-			link.setAttribute('download', filename);
-			link.style.visibility = 'hidden';
-			document.body.appendChild(link);
-			link.click();
-			document.body.removeChild(link);
+				// Get headers from the first row
+				const headers = Object.keys(dataToDownload[0]);
+				if (headers.length === 0) {
+					console.error('No headers found in data');
+					alert('No valid data structure for download');
+					return;
+				}
+
+				// Convert data to CSV format
+				const csvContent = [
+					headers.join(','),
+					...dataToDownload.map(row => 
+						headers.map(header => {
+							const value = row[header];
+							// Handle different data types and escape commas
+							if (value === null || value === undefined) {
+								return '';
+							}
+							const stringValue = String(value);
+							// Escape quotes and wrap in quotes if contains comma
+							if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+								return `"${stringValue.replace(/"/g, '""')}"`;
+							}
+							return stringValue;
+						}).join(',')
+					)
+				].join('\n');
+
+				// Create and trigger download
+				const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+				const link = document.createElement('a');
+				const url = URL.createObjectURL(blob);
+				link.setAttribute('href', url);
+				link.setAttribute('download', filename);
+				link.style.visibility = 'hidden';
+				document.body.appendChild(link);
+				link.click();
+				document.body.removeChild(link);
+				URL.revokeObjectURL(url);
+			} catch (error) {
+				console.error('Error downloading data:', error);
+				alert('An error occurred while downloading the data. Please try again.');
+			}
 		};
 		
 		// Download statistical data as CSV (original function)
@@ -810,9 +872,29 @@ export default {
 				} 
 				else if (processedData.value.type === 'statistical_result') {
 					// For statistical data
-					const columns = Object.keys(processedData.value.result[0] || {});
+					let resultData = processedData.value.result;
 					
-					console.log('Statistical data before conversion:', processedData.value.result);
+					// Handle different result formats
+					if (Array.isArray(resultData)) {
+						// Already in array format
+					} else if (typeof resultData === 'object' && resultData !== null) {
+						// Convert object to array format
+						resultData = [resultData];
+					} else {
+						console.error('Unexpected statistical result format');
+						alert('Statistical data format not supported for continued modification');
+						return;
+					}
+					
+					if (resultData.length === 0) {
+						console.error('No statistical data available');
+						alert('No statistical data available for continued modification');
+						return;
+					}
+					
+					const columns = Object.keys(resultData[0] || {});
+					
+					console.log('Statistical data before conversion:', resultData);
 					console.log('Columns:', columns);
 					
 					// Create a single new file representation
@@ -821,34 +903,47 @@ export default {
 					// Update preview data - replace all existing preview data
 					previewData.value = [{
 						headers: columns,
-						displayedRows: processedData.value.result.slice(0, 5),
-						totalRows: processedData.value.result.length
+						displayedRows: resultData.slice(0, 5),
+						totalRows: resultData.length
 					}];
 					
 					headers.value = columns;
-					rows.value = processedData.value.result;
+					rows.value = resultData;
 					
 					console.log('Updated preview data for statistical', previewData.value);
 				} 
-				else {
+				else if (processedData.value.type === 'table') {
 					// For transformed data
-					console.log('Transformed data before conversion:', processedData.value.data);
-					console.log('Columns:', processedData.value.columns);
+					if (!processedData.value.data || !Array.isArray(processedData.value.data) || processedData.value.data.length === 0) {
+						console.error('No valid transformation data available');
+						alert('No transformation data available for continued modification');
+						return;
+					}
+					
+					const transformedData = processedData.value.data;
+					const columns = Object.keys(transformedData[0] || {});
+					
+					console.log('Transformed data before conversion:', transformedData);
+					console.log('Columns:', columns);
 					
 					// Create a single new file representation
 					files.value = [new File([], 'transformed_data.csv')];
 					
 					// Update preview data - replace all existing preview data
 					previewData.value = [{
-						headers: processedData.value.columns,
-						displayedRows: processedData.value.data.slice(0, 5),
-						totalRows: processedData.value.data.length
+						headers: columns,
+						displayedRows: transformedData.slice(0, 5),
+						totalRows: transformedData.length
 					}];
 					
-					headers.value = processedData.value.columns;
-					rows.value = processedData.value.data;
+					headers.value = columns;
+					rows.value = transformedData;
 					
 					console.log('Updated preview data for transformed', previewData.value);
+				} else {
+					console.error('Unknown processed data type:', processedData.value.type);
+					alert('Unknown data type for continued modification');
+					return;
 				}
 				
 				// Clear the processed data to hide the results section
@@ -938,31 +1033,58 @@ export default {
 						console.log('Initialized from visualization data in store');
 					} 
 					else if (storeProcessedData.type === 'statistical_result') {
-						const columns = Object.keys(storeProcessedData.result[0] || {});
+						let resultData = storeProcessedData.result;
+						
+						// Handle different result formats
+						if (Array.isArray(resultData)) {
+							// Already in array format
+						} else if (typeof resultData === 'object' && resultData !== null) {
+							// Convert object to array format
+							resultData = [resultData];
+						} else {
+							console.error('Unexpected statistical result format in store');
+							return;
+						}
+						
+						if (resultData.length === 0) {
+							console.error('No statistical data available in store');
+							return;
+						}
+						
+						const columns = Object.keys(resultData[0] || {});
 						
 						previewData.value = [{
 							headers: columns,
-							displayedRows: storeProcessedData.result.slice(0, 5),
-							totalRows: storeProcessedData.result.length
+							displayedRows: resultData.slice(0, 5),
+							totalRows: resultData.length
 						}];
 						
 						headers.value = columns;
-						rows.value = storeProcessedData.result;
+						rows.value = resultData;
 						
 						// Create dummy File objects
 						files.value = [new File([], 'statistical_data.csv')];
 						
 						console.log('Initialized from statistical data in store');
 					} 
-					else if (storeProcessedData.type === 'transformed') {
+					else if (storeProcessedData.type === 'table') {
+						// Handle transformed data from the new agent workflow
+						if (!storeProcessedData.data || !Array.isArray(storeProcessedData.data) || storeProcessedData.data.length === 0) {
+							console.error('No valid transformation data in store');
+							return;
+						}
+						
+						const transformedData = storeProcessedData.data;
+						const columns = Object.keys(transformedData[0] || {});
+						
 						previewData.value = [{
-							headers: storeProcessedData.columns,
-							displayedRows: storeProcessedData.data.slice(0, 5),
-							totalRows: storeProcessedData.data.length
+							headers: columns,
+							displayedRows: transformedData.slice(0, 5),
+							totalRows: transformedData.length
 						}];
 						
-						headers.value = storeProcessedData.columns;
-						rows.value = storeProcessedData.data;
+						headers.value = columns;
+						rows.value = transformedData;
 						
 						// Create dummy File objects
 						files.value = [new File([], 'transformed_data.csv')];

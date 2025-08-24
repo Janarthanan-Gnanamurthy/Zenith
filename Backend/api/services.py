@@ -14,10 +14,11 @@ import google.generativeai as genai
 from datetime import datetime
 from sklearn.preprocessing import StandardScaler
 from dotenv import load_dotenv
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from agents import (
-    analyze_prompt_intent, get_chart_config, get_transformation_code, get_statistical_code, 
-    execute_code_safely, GenerationRequest, IntentType, ChartConfig as AgentChartConfig, 
-    PromptIntentResponse
+    GenerationRequest, IntentType, analyze_with_agents
 )
 import uuid
 import json
@@ -44,27 +45,34 @@ def process_chart_data(data: List[Dict], config: Dict) -> Dict:
     logger.info(f"Processing chart data with config: {config}")
     df = pd.DataFrame(data)
 
+    # Map agent config keys to expected keys
+    chart_type = config.get('chart_type', 'bar')
+    x_axis = config.get('x_axis', df.columns[0] if len(df.columns) > 0 else 'x')
+    y_axis = config.get('y_axis', df.columns[1] if len(df.columns) > 1 else df.columns[0])
+    aggregation = config.get('aggregation', 'none')
+    title = config.get('chart_title', config.get('title', 'Chart'))  # Handle both chart_title and title
+
     # Apply aggregation if specified
-    if config['aggregation'] != 'none':
-        if config['aggregation'] == 'sum':
-            df = df.groupby(config['x_axis'])[config['y_axis']].sum().reset_index()
-        elif config['aggregation'] == 'average':
-            df = df.groupby(config['x_axis'])[config['y_axis']].mean().reset_index()
-        elif config['aggregation'] == 'count':
-            df = df.groupby(config['x_axis']).size().reset_index(name=config['y_axis'])
+    if aggregation != 'none':
+        if aggregation == 'sum':
+            df = df.groupby(x_axis)[y_axis].sum().reset_index()
+        elif aggregation == 'average':
+            df = df.groupby(x_axis)[y_axis].mean().reset_index()
+        elif aggregation == 'count':
+            df = df.groupby(x_axis).size().reset_index(name=y_axis)
 
     logger.debug(f"Aggregated data: {df}")
 
     # Convert categorical values to string (Avoid converting numeric y-axis to string)
-    df[config['x_axis']] = df[config['x_axis']].astype(str)
+    df[x_axis] = df[x_axis].astype(str)
 
     chart_config = {
-        'type': config['chart_type'],
+        'type': chart_type,
         'data': {
-            'labels': df[config['x_axis']].tolist(),
+            'labels': df[x_axis].tolist(),
             'datasets': [{
-                'label': config['y_axis'],
-                'data': df[config['y_axis']].tolist(),
+                'label': y_axis,
+                'data': df[y_axis].tolist(),
                 'backgroundColor': [
                     '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
                     '#FF9F40', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'
@@ -78,7 +86,7 @@ def process_chart_data(data: List[Dict], config: Dict) -> Dict:
             'plugins': {
                 'title': {
                     'display': True,
-                    'text': config['title']
+                    'text': title
                 },
                 'legend': {
                     'display': True
@@ -89,13 +97,13 @@ def process_chart_data(data: List[Dict], config: Dict) -> Dict:
                     'beginAtZero': True,
                     'title': {
                         'display': True,
-                        'text': config['y_axis']
+                        'text': y_axis
                     }
                 },
                 'x': {
                     'title': {
                         'display': True,
-                        'text': config['x_axis']
+                        'text': x_axis
                     }
                 }
             }
@@ -201,61 +209,53 @@ async def process_data(
         if len(files) > 1:
             prompt = f"(Combined multiple files) {prompt}"
 
+        # Use the new agent workflow
         generation_request = GenerationRequest(prompt=prompt, columns=combined_df.columns.tolist())
-        intent_response = await analyze_prompt_intent(generation_request)
+        agent_result = await analyze_with_agents(generation_request, combined_df)
 
-        logger.info(f"Detected intent: {intent_response.intent}")
+        logger.info(f"Agent result: {agent_result}")
 
-        if intent_response.intent == IntentType.VISUALIZATION:
-            chart_config = await get_chart_config(generation_request)
-            processed_chart_data = process_chart_data(combined_df.to_dict('records'), chart_config.dict())
+        # Parse the result and return appropriate response
+        intent = agent_result.get("intent")
+        if intent == IntentType.VISUALIZATION or intent == "visualization":
+            chart_config = agent_result.get("chart_config")
+            processed_chart_data = process_chart_data(combined_df.to_dict('records'), chart_config)
             return {
                 "type": "chart",
                 "config": processed_chart_data,
                 "data": combined_df.to_dict('records')
             }
-
-        elif intent_response.intent == IntentType.TRANSFORMATION:
-            transformation_code = await get_transformation_code(generation_request)
-            transformed_df = execute_code_safely(transformation_code, combined_df, {})
+        elif intent == IntentType.TRANSFORMATION or intent == "transformation":
+            result = agent_result.get("result")
+            # result is expected to be a DataFrame or list of dicts
+            if isinstance(result, pd.DataFrame):
+                data = result.to_dict('records')
+            else:
+                data = result
             return {
                 "type": "table",
-                "data": transformed_df.to_dict('records'),
+                "data": data,
                 "message": "Data transformed successfully."
             }
-
-        elif intent_response.intent == IntentType.STATISTICAL:
-            statistical_code = await get_statistical_code(generation_request)
-            stat_result = execute_code_safely(statistical_code, combined_df, {})
-            
+        elif intent == IntentType.STATISTICAL or intent == "statistical":
+            result = agent_result.get("result")
             # Convert result to a JSON-serializable format
-            if isinstance(stat_result, pd.DataFrame):
-                result_data = stat_result.to_dict('records')
-            elif isinstance(stat_result, dict):
-                result_data = {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in stat_result.items()}
-            elif isinstance(stat_result, (np.ndarray, list)):
-                result_data = stat_result.tolist()
+            if isinstance(result, pd.DataFrame):
+                result_data = result.to_dict('records')
+            elif isinstance(result, dict):
+                result_data = {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in result.items()}
+            elif isinstance(result, (np.ndarray, list)):
+                result_data = result.tolist() if isinstance(result, np.ndarray) else result
             else:
-                result_data = str(stat_result)
-                
+                result_data = str(result)
             return {
                 "type": "statistical_result",
                 "result": result_data,
                 "message": "Statistical analysis completed."
             }
-
         else:
+            logger.error(f"Unknown or unsupported intent: {intent}")
             raise HTTPException(status_code=400, detail="Could not determine the intent of the prompt.")
-            
-            response = {
-                "type": "transformation",
-                "data": transformed_df.head(100).to_dict('records'),  # Send first 100 rows
-                "columns": transformed_df.columns.tolist(),
-                "rows": len(transformed_df),
-                "saved_path": transformed_path
-            }
-
-        return response
 
     except Exception as e:
         logger.error(f"Error during processing: {str(e)}")
@@ -269,27 +269,35 @@ async def generate_dashboard(prompt: str, columns: List[str], data: List[Dict[st
     """Generate dashboard widgets based on natural language prompt."""
     logger.info(f"Generating dashboard with prompt: {prompt}")
     try:
-        # Analyze prompt to understand the user's intent
-        intent_analysis = await analyze_prompt_intent(prompt)
+        # Convert data to DataFrame for agent processing
+        df = pd.DataFrame(data)
         
-        # Generate widget configurations
+        # Use the new agent workflow
+        generation_request = GenerationRequest(prompt=prompt, columns=columns)
+        agent_result = await analyze_with_agents(generation_request, df)
+        
+        logger.info(f"Agent result for dashboard: {agent_result}")
+        
+        # Generate widget configurations based on agent result
         widgets = []
+        intent = agent_result.get("intent", "visualization")
         
         # Process based on intent
-        if "chart" in prompt.lower() or "plot" in prompt.lower() or "visualize" in prompt.lower() or intent_analysis['intent'] == 'visualization':
+        if intent == "visualization" or "chart" in prompt.lower() or "plot" in prompt.lower() or "visualize" in prompt.lower():
             # Generate visualization widget(s)
-            chart_config = await get_chart_config(prompt, columns)
-            widgets.append({
-                "type": "chart",
-                "id": f"chart_{len(widgets)+1}",
-                "config": {
-                    "title": chart_config["title"],
-                    "chartType": chart_config["chart_type"],
-                    "xColumn": columns.index(chart_config["x_axis"]) if chart_config["x_axis"] in columns else 0,
-                    "yColumns": [columns.index(chart_config["y_axis"])] if chart_config["y_axis"] in columns else [1],
-                    "size": 2  # Medium size as default
-                }
-            })
+            chart_config = agent_result.get("chart_config", {})
+            if chart_config:
+                widgets.append({
+                    "type": "chart",
+                    "id": f"chart_{len(widgets)+1}",
+                    "config": {
+                        "title": chart_config.get("chart_title", chart_config.get("title", "Chart")),
+                        "chartType": chart_config.get("chart_type", "bar"),
+                        "xColumn": columns.index(chart_config.get("x_axis", columns[0])) if chart_config.get("x_axis") in columns else 0,
+                        "yColumns": [columns.index(chart_config.get("y_axis", columns[1] if len(columns) > 1 else columns[0]))] if chart_config.get("y_axis") in columns else [1 if len(columns) > 1 else 0],
+                        "size": 2  # Medium size as default
+                    }
+                })
         
         if "table" in prompt.lower():
             # Generate table widget
@@ -304,7 +312,7 @@ async def generate_dashboard(prompt: str, columns: List[str], data: List[Dict[st
                 }
             })
         
-        if "stat" in prompt.lower() or "statistic" in prompt.lower() or intent_analysis['intent'] == 'statistical':
+        if intent == "statistical" or "stat" in prompt.lower() or "statistic" in prompt.lower():
             # Generate stat widget(s)
             # Attempt to find a numeric column for statistics
             numeric_columns = []
@@ -325,9 +333,10 @@ async def generate_dashboard(prompt: str, columns: List[str], data: List[Dict[st
                 })
         
         if "insight" in prompt.lower() or "analyze" in prompt.lower():
-            # Generate insight widget
-            text_prompt = f"Provide a brief data insight about the following columns: {', '.join(columns)}"
-            insight_text = await generate_with_ollama(text_prompt)
+            # Generate insight widget - use agent result if available
+            insight_text = "Data analysis completed."
+            if agent_result.get("result"):
+                insight_text = str(agent_result["result"])
             
             widgets.append({
                 "type": "insight",
