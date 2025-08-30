@@ -316,10 +316,8 @@ IMPORTANT RULES:
 - Always use lists for column selection: df[['col1', 'col2']]
 - you have access to data in the variable 'df'
 - Store result in 'transformed_df'
-- Use .reset_index() after groupby operations
 - Handle edge cases and missing data
 - No function definitions, work directly with variables
-- Only use allowed libraries: pandas, numpy, scipy.stats
 
 Generate only the code, no explanations."""),
             ("human", """Data Context:
