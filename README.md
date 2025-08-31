@@ -23,7 +23,7 @@ A sophisticated web application that combines data processing, analysis, and vis
 - 🔍 Process and analyze data through natural language queries
 - 🏗️ Build sophisticated dashboards without writing code
 - ⚡ Perform complex analyses through PySpark integration
-- 🧠 Access AI-powered insights through Ollama integration
+- 🧠 Access AI-powered insights through Gemini API integration
 - 🌐 Share dashboards publicly using Cloudflare Tunnels
 
 ## 🔄 System Architecture
@@ -46,7 +46,7 @@ A sophisticated web application that combines data processing, analysis, and vis
 ### ⚙️ Backend
 - 🚀 FastAPI for the REST API implementation
 - 🔥 PySpark for distributed data processing
-- 🤖 Ollama for local AI model integration
+- 🤖 Google Gemini API for AI model integration
 - 🐍 Python 3.8+ for backend services
 
 ## 📋 Prerequisites
@@ -54,7 +54,7 @@ A sophisticated web application that combines data processing, analysis, and vis
 - 📦 Node.js (version 18.0.0 or higher)
 - 🐍 Python (version 3.8 or higher)
 - ☕ Java Runtime Environment (JRE) for PySpark
-- 🤖 Ollama installation
+- 🔑 Google Gemini API key
 - 🐘 Apache Hadoop (version 3.2 or higher)
 
 ## ⚙️ Installation
@@ -97,20 +97,15 @@ cd [hadoop-directory]
 jps
 ```
 
-### 🤖 Ollama Setup
+### 🤖 Gemini API Setup
 
-For Unix-based systems:
+1. Get your API key from [Google AI Studio](https://aistudio.google.com/)
+2. Create a `.env` file in the Backend directory:
 ```bash
-curl https://ollama.ai/install.sh | sh
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-For Windows:
-- Download and install from https://ollama.ai/download
-
-Pull required model:
-```bash
-ollama pull deepseek-r1:8b
-```
 
 ## 📝 Usage
 

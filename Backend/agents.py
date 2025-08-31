@@ -9,6 +9,7 @@ from typing import Optional, List, Union, Dict, Any, TypedDict
 from enum import Enum
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, validator
+from dotenv import load_dotenv
 
 # LangChain imports
 from langchain.schema import BaseMessage, HumanMessage, AIMessage, SystemMessage
@@ -25,6 +26,12 @@ from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
+# Google Generative AI imports
+import google.generativeai as genai
+
+# Load environment variables
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -32,9 +39,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Ollama configuration
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+# Gemini configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+# Configure Gemini
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    logger.warning("GEMINI_API_KEY not found in environment variables")
 
 # Pydantic Models for Validation (keeping existing models)
 class IntentType(str, Enum):
@@ -87,13 +100,13 @@ class AgentState(TypedDict):
     result: Optional[Any]
     error: Optional[str]
 
-# Custom Ollama LLM for LangChain
-class OllamaLLM(LLM):
+# Custom Gemini LLM for LangChain
+class GeminiLLM(LLM):
     temperature: float = 0.5
     
     @property
     def _llm_type(self) -> str:
-        return "ollama"
+        return "gemini"
     
     def _call(
         self,
@@ -102,7 +115,7 @@ class OllamaLLM(LLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> str:
-        """Call Ollama API synchronously."""
+        """Call Gemini API synchronously."""
         import asyncio
         return asyncio.run(self._acall(prompt, stop, run_manager, **kwargs))
     
@@ -113,34 +126,40 @@ class OllamaLLM(LLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> str:
-        """Call Ollama API asynchronously."""
-        url = f"{OLLAMA_BASE_URL}/api/generate"
-        
-        payload = {
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": self.temperature,
-                "top_p": 0.95,
-            }
-        }
+        """Call Gemini API asynchronously."""
+        if not GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY not configured")
         
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                result = response.json()
-                return result.get("response", "")
+            # Configure the model
+            model = genai.GenerativeModel(
+                model_name=MODEL_NAME,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=self.temperature,
+                    top_p=0.95,
+                    max_output_tokens=8192,
+                )
+            )
+            
+            # Generate content
+            response = model.generate_content(prompt)
+            
+            # Extract the text from the response
+            if response.text:
+                return response.text
+            else:
+                logger.warning("Empty response from Gemini API")
+                return ""
+                
         except Exception as e:
-            logger.error(f"Error calling Ollama: {str(e)}")
+            logger.error(f"Error calling Gemini API: {str(e)}")
             raise
 
 class DataAnalysisAgents:
     """Main class containing all data analysis agents using LangChain and LangGraph."""
     
-    def __init__(self, temperature: float = 0.5):
-        self.llm = OllamaLLM(temperature=temperature)
+    def __init__(self, temperature: float = 0.05):
+        self.llm = GeminiLLM(temperature=temperature)
         self.setup_tools()
         self.setup_agents()
         self.setup_graph()
@@ -427,11 +446,11 @@ Generate the appropriate Python code.""")
             # Ensure proper result variable based on intent
             if state["intent"] == "transformation":
                 if "transformed_df" not in code:
-                    code += "\n# Ensure transformed_df exists\ntransformed_df = df.copy()"
+                    code += "\n#transformed_df exists\ntransformed_df = df.copy()"
 
             elif state["intent"] == "statistical":
                 if "stat_result" not in code:
-                    code += "\n# Ensure stat_result exists\nstat_result = df.describe()"
+                    code += "\n# stat_result exists\nstat_result = df.describe()"
             
             state["generated_code"] = code
             

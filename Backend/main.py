@@ -4,8 +4,8 @@ from api import router as api_router
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from the current directory
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 app = FastAPI(title="Datafy API")
 

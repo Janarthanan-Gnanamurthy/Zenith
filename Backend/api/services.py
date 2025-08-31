@@ -30,7 +30,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+# Load environment variables from the Backend directory
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 # Local filesystem base path for storing files
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads")
