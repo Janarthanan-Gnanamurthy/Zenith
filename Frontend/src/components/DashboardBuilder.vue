@@ -667,7 +667,7 @@ export default defineComponent({
 					return rowObj;
 				});
 				
-				const response = await apiClient.post('http://localhost:8000/api/generate-dashboard', {
+				const response = await apiClient.post('https://test.edventuretech.in/api/generate-dashboard', {
 					prompt: this.dashboardPrompt,
 					columns: columns,
 					data: data 

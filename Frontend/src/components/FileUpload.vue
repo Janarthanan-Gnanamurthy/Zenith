@@ -181,7 +181,7 @@ export default {
       formData.append('prompt', this.userPrompt);
 
       try {
-        const response = await fetch('http://localhost:8000/process', {
+        const response = await fetch('https://test.edventuretech.in/process', {
           method: 'POST',
           body: formData
         });

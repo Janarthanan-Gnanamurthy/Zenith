@@ -14,7 +14,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",  # Local development environment
-        "https://zenith-ed.netlify.app"  # Production frontend
+        "https://zenith-ed.netlify.app",  # Production frontend
+        "https://test.edventuretech.in"  # Test environment
     ],
     allow_credentials=True,
     allow_methods=["*"],
