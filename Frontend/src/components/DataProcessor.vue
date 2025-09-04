@@ -1,25 +1,16 @@
 <template>
-	<div class="flex flex-col relative h-screen">
+	<div class="flex flex-col relative h-full">
 		<!-- Page Content -->
 		<main class="flex-1 overflow-y-auto">
 			<div class="container mx-auto px-4 py-8">
-				<!-- Page Header -->
-				<div class="mb-10 text-center">
-					<h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600 mb-4">
-						Intelligent Data Analysis Suite
-					</h1>
-					<p class="text-lg text-gray-600 max-w-2xl mx-auto">
-						Transform raw data into actionable insights with our AI-powered platform
-					</p>
-				</div>
 				
 				<!-- Main Content Area with Vertical Layout -->
-				<div class="flex flex-col gap-8">
+				<div class="flex flex-col items-center gap-8">
 					<!-- Upload Widget -->
-					<div class="w-full">
+					<div class="w-2/5">
 						<div class="card bg-base-100 shadow-xl overflow-hidden border border-gray-100 mb-6">
 							<div class="card-body p-0">
-								<div class="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-white">
+								<div class="bg-gradient-to-r from-indigo-500 to-purple-600 p-4 text-white">
 									<div class="flex items-center gap-2 mb-1">
 										<h2 class="card-title text-2xl flex items-center gap-2">
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
@@ -32,12 +23,12 @@
 									<p class="opacity-80">Upload and process your CSV files for analysis</p>
 								</div>
 								
-								<div class="p-6">
+								<div class="p-4">
 									<div class="flex flex-col items-center justify-center w-full">
-										<label class="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl cursor-pointer border-primary/30 bg-base-200/30 hover:bg-base-200/50 transition-all">
-											<div class="flex flex-col items-center justify-center pt-5 pb-6">
-												<div class="mb-3 text-primary">
-													<svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<label class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer border-primary/30 bg-base-200/30 hover:bg-base-200/50 transition-all">
+											<div class="flex flex-col items-center justify-center pt-4 pb-5">
+												<div class="mb-2 text-primary">
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
 													</svg>
 												</div>
@@ -94,7 +85,7 @@
 					</div>
 					
 					<!-- Data Preview Section - Now Below Upload -->
-					<div v-if="previewData.length > 0" class="w-full">
+					<div v-if="previewData.length > 0" class="w-3/4">
 						<div class="card bg-base-100 shadow-xl border border-gray-100 mb-8">
 							<div class="card-body p-0">
 								<div class="bg-gradient-to-r from-teal-500 to-emerald-500 p-6 text-white">
@@ -176,10 +167,12 @@
 								</div>
 								<!-- Chart Result -->
 								<div v-if="processedData.type === 'chart'" class="p-6">
-									<div class="bg-base-200/50 rounded-xl p-6 mb-6">
-										<h3 class="text-lg font-medium mb-4 text-base-content">{{ processedData.config?.options?.plugins?.title?.text || 'Visualization' }}</h3>
-										<div class="chart-container aspect-[4/3] max-h-[500px]">
-											<canvas ref="chartCanvas"></canvas>
+									<div class="flex flex-col items-center bg-base-200/50 rounded-xl p-6 mb-6">
+										<h3 class="text-lg font-medium mb-4 text-base-content text-center w-full">{{ processedData.config?.options?.plugins?.title?.text || 'Visualization' }}</h3>
+										<div class="w-full flex justify-center">
+											<div class="chart-container aspect-[4/3] max-h-[500px] flex justify-center items-center">
+												<canvas ref="chartCanvas"></canvas>
+											</div>
 										</div>
 									</div>
 									<div class="flex justify-end gap-3">
@@ -284,10 +277,10 @@
 		
 		<!-- Sticky Text Prompt at Bottom -->
 		<div class="sticky bottom-0 left-0 right-0 z-10 bg-base-100 border-t border-gray-200 shadow-lg">
-			<div class="container mx-auto p-4">
+			<div class="container mx-auto">
 				<div class="card bg-base-100">
 					<div class="card-body p-4">
-						<h2 class="card-title text-xl mb-3 flex items-center gap-2">
+						<h2 class="card-title text-xl mb-1 flex items-center gap-2">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-primary">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
 							</svg>
@@ -295,24 +288,31 @@
 						</h2>
 						
 						<div class="flex items-center gap-3">
-							<textarea 
-								v-model="userPrompt" 
-								class="textarea textarea-bordered flex-1" 
-								placeholder="e.g., 'Show me a bar chart of sales by region' or 'Calculate the average revenue'"
-							></textarea>
-							
+							<div class="flex-1">
+								<div class="border border-gray-200 rounded-2xl bg-base-200/50 p-2 flex items-center min-h-[3rem]">
+									<textarea 
+										v-model="userPrompt" 
+										class="textarea bg-transparent resize-none w-full p-2 focus:outline-none"
+										rows="1"
+										placeholder="Type your request… (Shift+Enter for newline)"
+										@keydown.enter.exact.prevent="processData"
+										@keydown.enter.shift.stop
+									></textarea>
+								</div>
+							</div>
 							<button 
 								@click="processData" 
 								class="btn btn-primary"
 								:disabled="files.length === 0 || !userPrompt || loading"
+								title="Send"
 							>
-								<svg v-if="!loading" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+								<svg v-if="!loading" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+									<path d="M2.25 12c0-.414.336-.75.75-.75h12.69l-5.47-5.47a.75.75 0 1 1 1.06-1.06l6.75 6.75a.75.75 0 0 1 0 1.06l-6.75 6.75a.75.75 0 1 1-1.06-1.06l5.47-5.47H3a.75.75 0 0 1-.75-.75Z"/>
 								</svg>
 								<span v-if="loading" class="loading loading-spinner loading-sm"></span>
-								{{ loading ? 'Processing...' : 'Analyze' }}
 							</button>
 						</div>
+						<div class="text-xs text-gray-500 mt-1">Press Enter to send • Shift+Enter for newline</div>
 					</div>
 				</div>
 			</div>

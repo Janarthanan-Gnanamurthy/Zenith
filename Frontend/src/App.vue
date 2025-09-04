@@ -7,7 +7,7 @@
     <div class="drawer-content flex flex-col bg-gray-50">
       <!-- Navbar - only show when authenticated and make it sticky -->
       <header v-if="isAuthenticated" class="bg-gradient-to-r from-purple-700 to-indigo-800 text-white shadow-lg sticky top-0 z-10">
-        <div class="container mx-auto">
+        <div class="">
           <div class="navbar px-4">
             <!-- Mobile menu button -->
             <div class="flex-none lg:hidden">
@@ -20,7 +20,7 @@
             
             <!-- Brand logo -->
             <div class="flex-1">
-              <router-link to="/" class="flex items-center gap-3">
+              <router-link to="/" class="flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8">
                   <path d="M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.036-.84-1.875-1.875-1.875h-.75zM9.75 8.625c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875h-.75a1.875 1.875 0 01-1.875-1.875V8.625zM3 13.125c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v6.75c0 1.035-.84 1.875-1.875 1.875h-.75A1.875 1.875 0 013 19.875v-6.75z" />
                 </svg>
@@ -30,10 +30,10 @@
             
             <!-- Desktop menu -->
             <div class="flex-none hidden lg:block">
-              <ul class="menu menu-horizontal gap-2">
-                <li><router-link to="/" class="btn btn-ghost normal-case">Dashboard</router-link></li>
-                <li><router-link to="/dashboard-builder" class="btn btn-ghost normal-case">Build</router-link></li>
-                <li><router-link to="/about" class="btn btn-ghost normal-case">About</router-link></li>
+              <ul class="menu menu-horizontal gap-2 py-0">
+                <li><router-link to="/" class="btn btn-ghost normal-case py-0">Dashboard</router-link></li>
+                <li><router-link to="/dashboard-builder" class="btn btn-ghost normal-case py-0">Build</router-link></li>
+                <li><router-link to="/about" class="btn btn-ghost normal-case py-0">About</router-link></li>
               </ul>
             </div>
           </div>
@@ -47,7 +47,7 @@
     <!-- Sidebar drawer - only show when authenticated -->
     <div v-if="isAuthenticated" class="drawer-side">
       <label for="main-drawer" class="drawer-overlay"></label>
-      <aside class="bg-base-100 w-80 h-full border-r">
+      <aside class="bg-base-100 w-50 h-full border-r">
         <!-- User information section instead of duplicating project name -->
         <div class="p-4 flex items-center gap-3 border-b">
           <div class="avatar">
@@ -112,7 +112,7 @@
           <!-- Logout button -->
           <button 
             @click="handleLogout" 
-            class="btn btn-outline btn-error btn-block mb-6 flex items-center justify-center gap-2"
+            class="btn btn-outline btn-error btn-block mb-2 items-center justify-center gap-2 text-xs"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
@@ -122,7 +122,7 @@
           
           <div class="text-xs text-base-content/60 mb-2 uppercase font-semibold">Current Version</div>
           <div class="flex justify-between items-center">
-            <span class="badge badge-primary">v2.0.3</span>
+            <span class="badge badge-primary text-xs">v2.0.3</span>
             <a href="#" class="link link-hover text-sm">Check for updates</a>
           </div>
         </div>
