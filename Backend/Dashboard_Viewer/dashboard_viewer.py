@@ -7,7 +7,7 @@ from flask_cors import CORS
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 # Enable CORS for specific origins
-CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "https://zenith-ed.netlify.app", "https://test.edventuretech.in"]}})
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "https://test.edventuretech.in", "https://tokenlabs.edventuretech.in"]}})
 
 # Directory where dashboard files are stored
 DASHBOARD_DIR = Path("dashboards")
