@@ -7,11 +7,11 @@
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-16 h-16 mx-auto text-primary">
 						<path d="M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.036-.84-1.875-1.875-1.875h-.75zM9.75 8.625c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875h-.75a1.875 1.875 0 01-1.875-1.875V8.625zM3 13.125c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v6.75c0 1.035-.84 1.875-1.875 1.875h-.75A1.875 1.875 0 013 19.875v-6.75z" />
 					</svg>
-					<h1 class="text-2xl font-bold mt-2">Zenith</h1>
+					<h1 class="text-2xl font-bold mt-2">TokenLabs</h1>
 				</div>
 				
 				<h2 class="text-3xl font-extrabold mb-2">Create an account</h2>
-				<p class="text-base-content/60 mb-8">Start your journey with Zenith</p>
+				<p class="text-base-content/60 mb-8">Start your journey with TokenLabs</p>
 				
 				<div v-if="error" class="alert alert-error mb-6 shadow-md">
 					<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -129,7 +129,7 @@
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" class="w-24 h-24 mx-auto">
 						<path d="M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.036-.84-1.875-1.875-1.875h-.75zM9.75 8.625c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875h-.75a1.875 1.875 0 01-1.875-1.875V8.625zM3 13.125c0-1.036.84-1.875 1.875-1.875h.75c1.036 0 1.875.84 1.875 1.875v6.75c0 1.035-.84 1.875-1.875 1.875h-.75A1.875 1.875 0 013 19.875v-6.75z" />
 					</svg>
-					<h1 class="text-4xl font-bold text-white mt-5">Join Zenith Pro</h1>
+					<h1 class="text-4xl font-bold text-white mt-5">Join TokenLabs Pro</h1>
 				</div>
 				<h2 class="text-2xl font-semibold text-white">Unlock Advanced Data Analytics Tools</h2>
 				<p class="text-indigo-100 mt-4 text-lg">Create stunning visualizations and gain valuable insights with our powerful platform</p>

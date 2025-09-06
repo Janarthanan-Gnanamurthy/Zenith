@@ -20,11 +20,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function register(email, password) {
+  async function register(credentials) {
     loading.value = true;
     error.value = null;
     try {
-      const newUser = await authService.register(email, password);
+      const newUser = await authService.register(credentials);
       user.value = newUser;
       return newUser;
     } catch (err) {

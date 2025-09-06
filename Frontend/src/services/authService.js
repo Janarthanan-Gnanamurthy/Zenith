@@ -5,12 +5,14 @@ import {
   signOut,
   GoogleAuthProvider,
   signInWithPopup,
-  onAuthStateChanged
+  onAuthStateChanged,
+  updateProfile
 } from 'firebase/auth';
 
 export const authService = {
-  async register(email, password) {
+  async register({ email, password, name }) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(userCredential.user, { displayName: name });
     return userCredential.user;
   },
 
