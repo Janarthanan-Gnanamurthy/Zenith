@@ -73,7 +73,7 @@
               <label class="label">
                 <span class="label-text font-medium">Password</span>
               </label>
-              <a href="#" class="text-sm text-primary hover:underline">Forgot password?</a>
+              <a href="#" class="text-sm text-black hover:underline">Forgot password?</a>
             </div>
             <div class="relative">
               <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -104,7 +104,7 @@
             :disabled="authStore.loading"
           >
             <span v-if="authStore.loading" class="loading loading-spinner loading-sm"></span>
-            <span>Sign In</span>
+            <span class="text-white">Sign In</span>
           </button>
         </form>
         

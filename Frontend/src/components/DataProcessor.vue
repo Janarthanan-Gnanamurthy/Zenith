@@ -11,14 +11,14 @@
 						<div class="card bg-base-100 shadow-xl overflow-hidden border border-gray-100 mb-6">
 							<div class="card-body p-0">
 								<div class="bg-gradient-to-r from-indigo-500 to-purple-600 p-4 text-white">
-									<div class="flex items-center gap-2 mb-1">
+									<div class="flex justify-between items-center gap-2 mb-1">
 										<h2 class="card-title text-2xl flex items-center gap-2">
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
 											</svg>
 											Data Source
 										</h2>
-										<span class="badge badge-sm bg-white/20 border-none">Multiple Files Supported</span>
+										<span class="badge badge-sm bg-white/20 border-none text-white p-2 px-3">Multiple Files Supported</span>
 									</div>
 									<p class="opacity-80">Upload and process your CSV files for analysis</p>
 								</div>
@@ -142,7 +142,7 @@
 										</table>
 									</div>
 									<div class="mt-3 flex justify-between items-center">
-										<span class="text-sm text-gray-600">File: <span class="font-medium">{{ files[index].name }}</span></span>
+										<span class="text-sm text-gray-600">File: <span class="font-medium p-5">{{ files[index].name }}</span></span>
 										<span class="badge badge-neutral">
 											Showing {{ fileData.displayedRows.length }} of {{ fileData.totalRows }} rows
 										</span>
@@ -182,7 +182,7 @@
 											</svg>
 											Save Chart
 										</button>
-										<button @click="downloadChartImage" class="btn btn-primary">
+										<button @click="downloadChartImage" class="btn btn-primary text-white">
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
 											</svg>
@@ -211,7 +211,7 @@
 													</tr>
 												</tbody>
 											</table>
-											<div v-if="processedData.data.length > 20" class="mt-3 text-center text-sm text-gray-600">
+											<div v-if="processedData.data.length > 20" class="mt-3 text-center text-sm text-gray-600 p-5">
 												Showing first 20 rows of {{ processedData.data.length }} total rows
 											</div>
 										</div>
@@ -306,7 +306,7 @@
 								:disabled="files.length === 0 || !userPrompt || loading"
 								title="Send"
 							>
-								<svg v-if="!loading" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+								<svg v-if="!loading" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-white">
 									<path d="M2.25 12c0-.414.336-.75.75-.75h12.69l-5.47-5.47a.75.75 0 1 1 1.06-1.06l6.75 6.75a.75.75 0 0 1 0 1.06l-6.75 6.75a.75.75 0 1 1-1.06-1.06l5.47-5.47H3a.75.75 0 0 1-.75-.75Z"/>
 								</svg>
 								<span v-if="loading" class="loading loading-spinner loading-sm"></span>

@@ -26,12 +26,12 @@
 				<div class="flex justify-between items-center mb-6">
 					<div class="flex items-center space-x-3">
 						<h1 class="text-3xl font-bold text-gray-900">Dashboard Builder</h1>
-						<span class="badge badge-primary">Beta</span>
+						<span class="badge badge-primary text-white px-3">Beta</span>
 					</div>
 					<div class="flex items-center gap-2">
 						<button
 							@click="showFileUploadModal = true"
-							class="btn btn-outline btn-primary"
+							class="btn btn-outline btn-primary text-white hover:white"
 						>
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
@@ -141,7 +141,7 @@
 							<div class="flex flex-col sm:flex-row gap-3">
 								<button 
 									@click="addWidget('chart')" 
-									class="btn btn-primary"
+									class="btn btn-primary text-white"
 								>
 									<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 13v-1m4 1v-3m4 3V8M8 21l4-4 4 4M3 4h18M4 4v13a2 2 0 002 2h12a2 2 0 002-2V4"></path>
