@@ -335,7 +335,7 @@
 <script>
 import { ref, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
-import axios from 'axios';
+import { apiClient } from '@/services/apiService';
 import Chart from 'chart.js/auto';
 import * as XLSX from 'xlsx';
 import { useDataStore } from '@/stores/datasetStore';
@@ -361,7 +361,8 @@ export default {
 		const headers = ref([]);
 		const rows = ref([]);
 		
-		axios.defaults.baseURL = 'https://test.edventuretech.in/';
+		// apiClient is already configured with baseURL and authentication
+		// axios.defaults.baseURL = 'http://localhost:8000/';
 		
 		// Handle file upload
 		const handleFileUpload = (event) => {
@@ -540,7 +541,7 @@ export default {
 				// Add the prompt as a form field
 				formData.append('prompt', userPrompt.value);
 
-				const response = await axios.post('/api/process', formData, {
+				const response = await apiClient.post('/api/process', formData, {
 					headers: {
 						'Content-Type': 'multipart/form-data'
 					}

@@ -98,6 +98,7 @@
 
 <script>
 import { defineComponent } from 'vue';
+import { apiClient } from '@/services/apiService';
 
 export default defineComponent({
   name: 'DeployDashboard',
@@ -177,22 +178,10 @@ export default defineComponent({
           }
         };
         
-        // Deploy dashboard to Koyeb service
-        const koyebUrl = 'https://zenith.koyeb.app/api/deploy-dashboard';
-        const response = await fetch(koyebUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(dashboardData),
-          mode: 'cors'
-        });
+        // Deploy dashboard using authenticated API client
+        const response = await apiClient.post('/api/deploy-dashboard', dashboardData);
         
-        if (!response.ok) {
-          throw new Error(`HTTP error ${response.status}`);
-        }
-        
-        const data = await response.json();
+        const data = response.data;
         
         // Set the deployed URL
         this.deployedUrl = data.deployUrl;

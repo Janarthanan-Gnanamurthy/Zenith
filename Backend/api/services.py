@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, APIRouter
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any
@@ -22,6 +22,7 @@ from agents import (
 )
 import uuid
 import json
+from auth.dependencies import get_current_user
 
 # Configure logging
 logging.basicConfig(
@@ -184,12 +185,17 @@ def save_user_data(user_id: str, file_name: str, data: pd.DataFrame) -> str:
 async def process_data(
     files: List[UploadFile] = File(...),
     prompt: str = Form(...),
-    user_id: str = Form("anonymous")  # Default to 'anonymous' if not provided
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Process multiple files and a prompt, storing files locally.
+    Requires authentication.
     """
     try:
+        # Get user ID from authenticated user
+        user_id = current_user.get("uid", "anonymous")
+        logger.info(f"Processing data for authenticated user: {user_id}")
+        
         if not files:
             raise HTTPException(status_code=400, detail="No files provided")
 
@@ -307,9 +313,15 @@ async def process_data(
         pass
 
 @router.post("/generate-dashboard")
-async def generate_dashboard(prompt: str, columns: List[str], data: List[Dict[str, Any]]):
-    """Generate dashboard widgets based on natural language prompt."""
-    logger.info(f"Generating dashboard with prompt: {prompt}")
+async def generate_dashboard(
+    prompt: str, 
+    columns: List[str], 
+    data: List[Dict[str, Any]],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Generate dashboard widgets based on natural language prompt. Requires authentication."""
+    user_id = current_user.get("uid", "anonymous")
+    logger.info(f"Generating dashboard for user {user_id} with prompt: {prompt}")
     try:
         # Convert data to DataFrame for agent processing
         df = pd.DataFrame(data)
@@ -470,14 +482,20 @@ async def generate_dashboard(prompt: str, columns: List[str], data: List[Dict[st
         raise HTTPException(status_code=500, detail=f"Error generating dashboard: {str(e)}")
 
 @router.post("/deploy-dashboard")
-async def deploy_dashboard(dashboard_data: dict):
+async def deploy_dashboard(
+    dashboard_data: dict,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
     """
     Deploy a dashboard using Cloudflare Tunnels for public sharing.
+    Requires authentication and creates user-specific dashboard storage.
     
     This is a prototype implementation that saves the dashboard data to a file
     and creates a public URL using Cloudflare Tunnels.
     """
     try:
+        user_id = current_user.get("uid", "anonymous")
+        logger.info(f"Deploying dashboard for user: {user_id}")
         # Create a unique ID for the dashboard
         dashboard_id = str(uuid.uuid4())
         
@@ -485,8 +503,9 @@ async def deploy_dashboard(dashboard_data: dict):
         safe_name = "".join(c for c in dashboard_data["name"] if c.isalnum() or c in [' ', '_', '-']).strip()
         safe_name = safe_name.replace(' ', '_').lower()
         
-        # Create dashboards directory if it doesn't exist
-        os.makedirs("dashboards", exist_ok=True)
+        # Create user-specific dashboards directory
+        user_dashboards_dir = os.path.join("Dashboard_Viewer", "dashboards", user_id)
+        os.makedirs(user_dashboards_dir, exist_ok=True)
         
         # Ensure dataset structure is valid
         if "dataset" not in dashboard_data:
@@ -525,8 +544,8 @@ async def deploy_dashboard(dashboard_data: dict):
         
         dashboard_data = sanitize_json_value(dashboard_data)
         
-        # Save dashboard data to file
-        dashboard_path = f"Dashboard_Viewer/dashboards/{safe_name}_{dashboard_id}.json"
+        # Save dashboard data to user-specific file
+        dashboard_path = os.path.join(user_dashboards_dir, f"{safe_name}_{dashboard_id}.json")
         with open(dashboard_path, "w") as f:
             json.dump(dashboard_data, f)
             
@@ -542,8 +561,64 @@ async def deploy_dashboard(dashboard_data: dict):
         elif tunnel_hostname.startswith("http://"):
             tunnel_hostname = tunnel_hostname[7:]
         
-        deploy_url = f"https://{tunnel_hostname}/view/{safe_name}_{dashboard_id}"
+        deploy_url = f"https://{tunnel_hostname}/view/{user_id}/{safe_name}_{dashboard_id}"
         
         return {"deployUrl": deploy_url, "dashboardId": dashboard_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deploying dashboard: {str(e)}")
+
+@router.get("/user-dashboards")
+async def get_user_dashboards(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get all dashboards for the authenticated user.
+    """
+    try:
+        user_id = current_user.get("uid", "anonymous")
+        user_dashboards_dir = os.path.join("Dashboard_Viewer", "dashboards", user_id)
+        
+        dashboards = []
+        if os.path.exists(user_dashboards_dir):
+            for filename in os.listdir(user_dashboards_dir):
+                if filename.endswith('.json'):
+                    dashboard_id = filename.replace('.json', '')
+                    dashboards.append({
+                        "id": dashboard_id,
+                        "filename": filename,
+                        "name": dashboard_id.split('_')[0] if '_' in dashboard_id else dashboard_id
+                    })
+        
+        return {"dashboards": dashboards, "user_id": user_id}
+    except Exception as e:
+        logger.error(f"Error getting user dashboards: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting user dashboards: {str(e)}")
+
+@router.get("/user-data")
+async def get_user_data_info(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Get information about user's uploaded data files.
+    """
+    try:
+        user_id = current_user.get("uid", "anonymous")
+        user_upload_dir = os.path.join(UPLOAD_FOLDER, user_id)
+        
+        data_files = []
+        if os.path.exists(user_upload_dir):
+            for filename in os.listdir(user_upload_dir):
+                if filename.endswith('.parquet'):
+                    file_path = os.path.join(user_upload_dir, filename)
+                    file_stats = os.stat(file_path)
+                    data_files.append({
+                        "filename": filename,
+                        "size": file_stats.st_size,
+                        "created": datetime.fromtimestamp(file_stats.st_ctime).isoformat(),
+                        "modified": datetime.fromtimestamp(file_stats.st_mtime).isoformat()
+                    })
+        
+        return {"data_files": data_files, "user_id": user_id}
+    except Exception as e:
+        logger.error(f"Error getting user data info: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting user data info: {str(e)}")
