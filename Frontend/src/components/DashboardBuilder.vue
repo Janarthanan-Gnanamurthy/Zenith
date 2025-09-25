@@ -525,6 +525,11 @@ export default defineComponent({
 
 	created() {
 		this.loadDashboard();
+		// If navigated with a dashboard id, ensure we hydrate from Firestore
+		const idFromQuery = this.route?.query?.id;
+		if (idFromQuery && (!this.dataStore.headers.length || !localStorage.getItem('dashboardLayout'))) {
+			this.hydrateFromDashboardId(idFromQuery);
+		}
 		
 		// Set up authentication persistence
 		if (this.authToken) {
@@ -546,7 +551,7 @@ export default defineComponent({
 			);
 		},
 
-		loadDashboard() {
+		async loadDashboard() {
 			// Check if we have data in the store
 			if (!this.dataStore.headers.length) {
 				return;
@@ -560,6 +565,27 @@ export default defineComponent({
 				} catch (error) {
 					console.error('Error loading dashboard layout:', error);
 				}
+			}
+			console.log(this.dashboardWidgets);
+			console.log(this.savedLayout);
+		},
+
+		async hydrateFromDashboardId(dashboardId) {
+			try {
+				const dashboard = await dashboardService.getDashboardById(dashboardId);
+				const headers = dashboard.headers || [];
+				const rows = Array.isArray(dashboard.rows?.[0])
+					? dashboard.rows
+					: (dashboard.rows || []).map(rowObj => headers.map(h => rowObj?.[h] ?? ''));
+
+				// Set into store and localStorage
+				this.dataStore.setHeaders(headers);
+				this.dataStore.setRows(rows);
+				const widgets = dashboard.widgets || [];
+				this.dashboardWidgets = widgets;
+				localStorage.setItem('dashboardLayout', JSON.stringify(widgets));
+			} catch (error) {
+				console.error('Failed to hydrate dashboard by id:', error);
 			}
 		},
 
@@ -675,6 +701,7 @@ export default defineComponent({
 				if (response.data && response.data.widgets) {
 					// Add all generated widgets
 					this.dashboardWidgets = response.data.widgets;
+					console.log(this.dashboardWidgets);
 					
 					// Save to localStorage
 					this.saveDashboard();

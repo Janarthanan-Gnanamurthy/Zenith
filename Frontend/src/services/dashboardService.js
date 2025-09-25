@@ -1,4 +1,4 @@
-import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { app } from '@/firebase.js';
 
@@ -52,6 +52,30 @@ export const dashboardService = {
       }));
     } catch (error) {
       console.error('Error fetching dashboards:', error);
+      throw error;
+    }
+  },
+
+  async getDashboardById(dashboardId) {
+    try {
+      const auth = getAuth(app);
+      const user = auth.currentUser;
+
+      if (!user) {
+        throw new Error('User must be logged in to fetch dashboard');
+      }
+
+      const db = getFirestore(app);
+      const dashboardRef = doc(db, 'users', user.uid, 'dashboards', dashboardId);
+      const snapshot = await getDoc(dashboardRef);
+
+      if (!snapshot.exists()) {
+        throw new Error('Dashboard not found');
+      }
+
+      return { id: snapshot.id, ...snapshot.data() };
+    } catch (error) {
+      console.error('Error fetching dashboard by id:', error);
       throw error;
     }
   },

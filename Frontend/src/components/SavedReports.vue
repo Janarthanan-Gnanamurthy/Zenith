@@ -180,10 +180,16 @@ export default {
 
         loadDashboard(dashboard) {
             const dataStore = useDataStore();
-            dataStore.setHeaders(dashboard.headers);
-            dataStore.setRows(dashboard.rows);
-            localStorage.setItem('dashboardLayout', JSON.stringify(dashboard.widgets));
-            this.$router.push({ name: 'DashboardBuilder' });
+            const headers = dashboard.headers || [];
+            const rows = Array.isArray(dashboard.rows?.[0])
+                ? dashboard.rows
+                : (dashboard.rows || []).map(rowObj => headers.map(h => rowObj?.[h] ?? ''));
+
+            dataStore.setHeaders(headers);
+            dataStore.setRows(rows);
+            localStorage.setItem('dashboardLayout', JSON.stringify(dashboard.widgets || []));
+            // Pass the dashboard id so the builder can fetch a fresh copy if needed
+            this.$router.push({ name: 'DashboardBuilder', query: { id: dashboard.id } });
         },
 
         async duplicateDashboard(dashboard) {
