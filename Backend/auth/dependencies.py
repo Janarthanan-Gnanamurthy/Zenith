@@ -15,17 +15,17 @@ async def get_current_user(
     Falls back to development mode if no credentials provided and DISABLE_AUTH is set.
     """
     # Check if authentication is disabled for development
-    if os.getenv("DISABLE_AUTH", "false").lower() == "true":
-        if not credentials:
-            # Return a development user
-            return {
-                "uid": "dev_user_123",
-                "email": "dev@example.com",
-                "email_verified": True,
-                "name": "Development User",
-                "picture": None,
-                "firebase_claims": {}
-            }
+    # if os.getenv("DISABLE_AUTH", "false").lower() == "true":
+    #     if not credentials:
+    #         # Return a development user
+    #         return {
+    #             "uid": "dev_user_123",
+    #             "email": "dev@example.com",
+    #             "email_verified": True,
+    #             "name": "Development User",
+    #             "picture": None,
+    #             "firebase_claims": {}
+    #         }
     
     if not credentials:
         raise HTTPException(

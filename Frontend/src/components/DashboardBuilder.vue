@@ -38,15 +38,14 @@
 							</svg>
 							Upload New Data
 						</button>
-						<!-- <button
+						<button
 							@click="saveDashboardToFirebase"
 							class="btn btn-success"
 							:disabled="dashboardWidgets.length === 0 || isSaving"
-							disabled
 						>
 							<span v-if="isSaving" class="loading loading-spinner loading-xs mr-2"></span>
 							Save Dashboard
-						</button> -->
+						</button>
 						<DeployDashboard 
 							v-if="dashboardWidgets.length > 0" 
 							:dashboardWidgets="dashboardWidgets" 
@@ -465,9 +464,8 @@ import StatWidget from './widgets/StatWidget.vue';
 import { apiClient } from '@/services/apiService';
 import DeployDashboard from './DeployDashboard.vue';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { getFirestore, collection, addDoc, getDocs, doc, setDoc } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import { auth, app } from '@/firebase.js'; // You need to set up this file
+import { dashboardService } from '@/services/dashboardService';
+import { auth } from '@/firebase.js';
 
 export default defineComponent({
 	name: 'DashboardBuilder',
@@ -766,18 +764,19 @@ export default defineComponent({
 		},
 
 		async saveDashboardToFirebase() {
+			if (this.dashboardWidgets.length === 0) {
+				alert('Please add at least one widget to save the dashboard.');
+				return;
+			}
+
+			// Prompt for dashboard name
+			const dashboardName = prompt('Enter a name for your dashboard:', 'My Dashboard');
+			if (!dashboardName || dashboardName.trim() === '') {
+				return;
+			}
+
 			this.isSaving = true;
 			try {
-				const auth = getAuth(app);
-				const user = auth.currentUser;
-				if (!user) {
-					alert('You must be logged in to save dashboards.');
-					this.isSaving = false;
-					return;
-				}
-				const db = getFirestore(app);
-				const dashboardsRef = collection(db, 'users', user.uid, 'dashboards');
-
 				// Convert rows (array of arrays) to array of objects
 				const headers = this.dataStore.headers;
 				const rows = this.dataStore.rows.map(rowArr => {
@@ -788,10 +787,9 @@ export default defineComponent({
 					return rowObj;
 				});
 
+				// Clean widgets data
 				const cleanWidgets = JSON.parse(JSON.stringify(this.dashboardWidgets, (key, value) => {
-					// Remove undefined/null
 					if (value === undefined || value === null) return undefined;
-					// Prevent nested arrays
 					if (Array.isArray(value)) {
 						return value.filter(v => v !== undefined && v !== null && !Array.isArray(v));
 					}
@@ -799,19 +797,21 @@ export default defineComponent({
 				}));
 
 				const dashboardData = {
+					name: dashboardName.trim(),
 					widgets: cleanWidgets,
 					headers: headers,
 					rows: rows,
-					createdAt: new Date(),
-					name: cleanWidgets[0]?.config?.title || 'Untitled Dashboard'
+					description: `Dashboard with ${cleanWidgets.length} widget(s)`
 				};
-				await addDoc(dashboardsRef, dashboardData);
-				alert('Dashboard saved!');
-			} catch (e) {
-				console.error(e);
-				alert('Failed to save dashboard.');
+
+				await dashboardService.saveDashboard(dashboardData);
+				alert('Dashboard saved successfully!');
+			} catch (error) {
+				console.error('Error saving dashboard:', error);
+				alert(`Failed to save dashboard: ${error.message}`);
+			} finally {
+				this.isSaving = false;
 			}
-			this.isSaving = false;
 		}
 	}
 });

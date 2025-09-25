@@ -38,12 +38,8 @@ const routes = [
   {
     path: '/saved-reports',
     name: 'SavedReports',
-    component: () => import('@/components/InProgress.vue'),
-    props: {
-      pageName: 'Saved Reports',
-      completionDate: 'April 25, 2025',
-      defaultProgress: 80
-    },
+    component: () => import('@/components/SavedReports.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/settings',
